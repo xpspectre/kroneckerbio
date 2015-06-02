@@ -7,6 +7,7 @@ function [m, conNew] = updateAll(m, con, T, UseParams, UseSeeds, UseInputControl
 %   obj whenever the active parameters T change.
 
 % Constants
+nk = m.nk;
 ns = m.ns;
 nCon = size(con, 1);
 nTk = nnz(UseParams);
@@ -16,40 +17,44 @@ nTs = nnz(UseSeeds);
 nT = nTk + nTs + nTq + nTh;
 
 % Update parameter sets
-k = m.k;
+k = zeros(nk,nCon);
+for i = 1:nCon
+    k(:,i) = con(i).k;
+end
 k(UseParams) = T(1:nTk);
 
 s = zeros(ns,nCon);
-for iCon = 1:nCon
-    s(:,iCon) = con(iCon).s;
+for i = 1:nCon
+    s(:,i) = con(i).s;
 end
 s(UseSeeds) = T(nTk+1:nTk+nTs);
 
 q = cell(nCon,1);
 endIndex = 0;
-for iCon = 1:nCon
-    q{iCon} = con(iCon).q;
+for i = 1:nCon
+    q{i} = con(i).q;
     startIndex = endIndex + 1;
-    endIndex = endIndex + nnz(UseInputControls{iCon});
-    q{iCon}(UseInputControls{iCon}) = T(nTk+nTs+startIndex:nTk+nTs+endIndex);
+    endIndex = endIndex + nnz(UseInputControls{i});
+    q{i}(UseInputControls{i}) = T(nTk+nTs+startIndex:nTk+nTs+endIndex);
 end
 
 h = cell(nCon,1);
 endIndex = 0;
-for iCon = 1:nCon
-    h{iCon} = con(iCon).h;
+for i = 1:nCon
+    h{i} = con(i).h;
     startIndex = endIndex + 1;
-    endIndex = endIndex + nnz(UseDoseControls{iCon});
-    h{iCon}(UseDoseControls{iCon}) = T(nTk+nTs+nTq+startIndex:nTk+nTs+nTq+endIndex);
+    endIndex = endIndex + nnz(UseDoseControls{i});
+    h{i}(UseDoseControls{i}) = T(nTk+nTs+nTq+startIndex:nTk+nTs+nTq+endIndex);
 end
 
 % Update model
+%   Closures in m read this k
 m = m.Update(k);
 
 % Update experimental conditions
 if ~isnumeric(con)
     conNew = experimentZero(nCon);
-    for iCon = 1:nCon
-        conNew(iCon) = con(iCon).Update(s(:,iCon), q{iCon}, h{iCon});
+    for i = 1:nCon
+        conNew(i) = con(i).Update(k(:,i), s(:,i), q{i}, h{i});
     end
 end

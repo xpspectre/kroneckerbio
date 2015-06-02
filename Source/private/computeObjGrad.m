@@ -1,6 +1,7 @@
 function [G, D] = computeObjGrad(m, con, obj, opts)
 % Switch to Adjoint method if requested
 if opts.UseAdjoint
+    warning('UseAdjoint not implemented/modified for changes in param specs.')
     [G, D] = computeObjSensAdj(m, con, obj, opts);
     return
 end
@@ -32,6 +33,10 @@ for i_con = 1:n_con
     opts_i.AbsTol = opts.AbsTol{i_con};
     opts_i.ObjWeights = opts.ObjWeights(:,i_con);
     
+    UseParams_i = opts.UseParams(:,i_con);
+    opts_i.UseParams = UseParams_i;
+    inTk = nnz(UseParams_i);
+    
     UseSeeds_i = opts.UseSeeds(:,i_con);
     opts_i.UseSeeds = UseSeeds_i;
     inTs = nnz(UseSeeds_i);
@@ -44,7 +49,7 @@ for i_con = 1:n_con
     opts_i.UseDoseControls = UseDoseControls_i;
     inTh = nnz(UseDoseControls_i);
     
-    inT = nTk + inTs + inTq + inTh;
+    inT = inTk + inTs + inTq + inTh;
 
     % Integrate
     ints = integrateAllSens(m, con(i_con), obj(:,i_con), opts_i);
@@ -76,15 +81,15 @@ for i_con = 1:n_con
         Ds_i = obj(i_obj,i_con).dGds(ints(i_obj));
         Dq_i = obj(i_obj,i_con).dGdq(ints(i_obj));
         Dh_i = obj(i_obj,i_con).dGdh(ints(i_obj));
-        D_disc_i = [Dk_i(opts.UseParams); Ds_i(UseSeeds_i); Dq_i(UseInputControls_i); Dh_i(UseDoseControls_i)];
+        D_disc_i = [Dk_i(UseParams_i); Ds_i(UseSeeds_i); Dq_i(UseInputControls_i); Dh_i(UseDoseControls_i)];
 
         n_disc = numel(discrete_times_all{i_obj});
         for i_disc = 1:n_disc
             ti = discrete_times_all{i_obj}(i_disc);
             if obj(i_obj).Complex
-                dydT_i = reshape(ints(i_obj).dydT(ti), ny,nT);
+                dydT_i = reshape(ints(i_obj).dydT(ti), ny, inT);
             else
-                dydT_i = reshape(ints(i_obj).dydT(:,i_disc), ny,nT);
+                dydT_i = reshape(ints(i_obj).dydT(:,i_disc), ny, inT);
             end
             
             dGdy_i = row(obj(i_obj,i_con).dGdy(ti, ints(i_obj)));
@@ -99,26 +104,28 @@ for i_con = 1:n_con
     % Sum discrete and continuous terms
     Di = zeros(nT,1);
     
-    % Rate parameters are the same
-    inds_k = 1:nTk;
-    Di(inds_k) = D_cont(inds_k) + D_disc(inds_k);
+    % k parameters are different
+    ind_Tk_start = sum(sum(opts.UseParams(:,1:i_con-1)));
+    inds_k = 1 : ind_Tk_start+1 : ind_Tk_start+inTk;
+    inds_ki = 1 : inTk;
+    Di(inds_k) = D_cont(inds_ki) + D_disc(inds_ki);
     
     % s parameters are different
-    ind_Ts_start = nTk + sum(sum(opts.UseSeeds(:,1:i_con-1)));
-    inds_s = ind_Ts_start+1:ind_Ts_start+inTs;
-    inds_si = nTk+1:nTk+inTs;
+    ind_Ts_start = inTk + sum(sum(opts.UseSeeds(:,1:i_con-1)));
+    inds_s = ind_Ts_start+1 : ind_Ts_start+inTs;
+    inds_si = inTk+1 : inTk+inTs;
     Di(inds_s) = D_cont(inds_si) + D_disc(inds_si);
     
     % q parameters are different
-    Tqind = nTk + nTs + sum(cellfun(@sum, opts.UseInputControls(1:i_con-1)));
-    inds_q = Tqind+1:Tqind+inTq;
-    inds_qi = nTk+inTs+1:nTk+inTs+inTq;
+    Tqind = inTk + nTs + sum(cellfun(@sum, opts.UseInputControls(1:i_con-1)));
+    inds_q = Tqind+1 : Tqind+inTq;
+    inds_qi = inTk+inTs+1 : inTk+inTs+inTq;
     Di(inds_q) = D_cont(inds_qi) + D_disc(inds_qi);
     
     % h parameters are different
-    Thind = nTk + nTs + nTq + sum(cellfun(@sum, opts.UseDoseControls(1:i_con-1)));
-    inds_h = Thind+1:Thind+inTh;
-    inds_hi = nTk+inTs+inTq+1:inT;
+    Thind = inTk + nTs + nTq + sum(cellfun(@sum, opts.UseDoseControls(1:i_con-1)));
+    inds_h = Thind+1 : Thind+inTh;
+    inds_hi = inTk+inTs+inTq+1 : inT;
     Di(inds_h) = D_cont(inds_hi) + D_disc(inds_hi);
     
     % Add to cumulative goal value

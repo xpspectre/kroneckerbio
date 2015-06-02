@@ -24,19 +24,24 @@ function [m, con, G, D] = FitObjective(m, con, obj, opts)
 %       The objective structures defining the objective functions to be
 %       evaluated.
 %   opts: [ options struct scalar {} ]
-%       .UseParams [ logical vector nk | positive integer vector {1:nk} ]
+%       .UseParams [ logical matrix nk by nCon | logical vector nk | positive integer vector {true(nk,nCon) }]
 %           Indicates the kinetic parameters that will be allowed to vary
-%           during the optimization
-%       .UseSeeds [ logical matrix ns by nCon | logical vector ns |
-%                   positive integer vector {[]} ]
+%           during the optimization. UseParams can be:
+%           1) logical matrix nk by nCon to indicate active parameters for each
+%               condition
+%           2) logical index vector nk to indicate all conditions have the same
+%               active parameters
+%           3) positive integer vector into nk, all conditions have the same active
+%               parameters (TODO: either deprecate or make integer matrix analog)
+%       .UseSeeds [ logical matrix ns by nCon | logical vector ns | positive integer vector {true(ns,nCon)} ]
 %           Indicates the seeds that will be allowed to vary during the
-%           optimzation. If UseModelSeeds is true then UseSeeds can be a
-%           vector of linear indexes or a vector of logicals length of ns.
-%           If UseModelSeeds is false then UseSeeds can be a matrix of
-%           logicals size ns by nCon. It can also be a vector of length ns,
-%           and every experiment will be considered to have the same active
-%           seed parameters. It can also be a vector of linear indexes into
-%           the ns vector and assumed the same for all conditions.
+%           optimzation. UseSeeds can be:
+%           1) logical matrix ns by nCon to indicate active seed parameters for each
+%               condition
+%           2) logical index vector ns to indicate all conditions have the same
+%               active seed parameters
+%           3) positive integer vector into ns, all conditions have the same active
+%               seed parameters (TODO: either deprecate or make integer matrix analog)
 %       .UseInputControls [ cell vector nCon of logical vectors or positive 
 %                           integer vectors | logical vector nq | positive 
 %                           integer vector {[]} ]
@@ -189,7 +194,7 @@ nCon = numel(con);
 nObj = size(obj,1);
 
 % Ensure UseParams is logical vector
-[opts.UseParams, nTk] = fixUseParams(opts.UseParams, nk);
+[opts.UseParams, nTk] = fixUseParams(opts.UseParams, nk, nCon);
 
 % Ensure UseSeeds is a logical matrix
 [opts.UseSeeds, nTs] = fixUseSeeds(opts.UseSeeds, ns, nCon);

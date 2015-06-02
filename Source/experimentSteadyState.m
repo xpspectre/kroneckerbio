@@ -1,12 +1,15 @@
-function con = experimentSteadyState(m, s, basal_input, inp, dos, time_scale, name)
-%SteadyStateExperiment Construct a KroneckerBio experimental conditions
+function con = experimentSteadyState(m, k, s, basal_input, inp, dos, time_scale, name)
+%experimentSteadyState Construct a KroneckerBio experimental conditions
 %   structure describing a initial value problem first run to steady state
 %
-%   con = SteadyStateExperiment(m, tF, s, inp, dos, name)
+%   con = experimentSteadyState(m, k, s, basal_input, inp, dos, time_scale, name)
 %
 %   Inputs
 %   m: [ model struct scalar ]
 %       The KroneckerBio model for which these experiments will be run
+%   k: [ nonnegative vector nk ]
+%       Default = m.k
+%       The value of the rate parameters (TODO: unify parameters)
 %   s: [ nonnegative vector ns ]
 %       Default = m.s
 %       The values of the seed parameters
@@ -25,6 +28,7 @@ function con = experimentSteadyState(m, s, basal_input, inp, dos, time_scale, na
 %   name: [ string ]
 %       Default = ''
 %       An arbitrary name for the experiment
+
 %
 %   Outputs
 %   con: [ experiment struct scalar ]
@@ -35,16 +39,19 @@ function con = experimentSteadyState(m, s, basal_input, inp, dos, time_scale, na
 % This work is released under the MIT license.
 
 % Clean-up inputs
-if nargin < 6
+if nargin < 7
     name = [];
-    if nargin < 5
+    if nargin < 6
         time_scale = [];
-        if nargin < 4
+        if nargin < 5
             dos = [];
-            if nargin < 3
+            if nargin < 4
                 inp = [];
-                if nargin < 2
+                if nargin < 3
                     s = [];
+                    if nargin < 2
+                        k = [];
+                    end
                 end
             end
         end
@@ -53,6 +60,9 @@ end
 
 if isempty(time_scale)
     time_scale = 10;
+end
+if isempty(k)
+    k = m.k;
 end
 if isempty(s)
     s = m.s;
@@ -69,8 +79,12 @@ end
 
 % m
 assert(isscalar(m) && is(m, 'Model'), 'KroneckerBio:Experiment:m', 'm must be a Model')
-m = keepfields(m, {'Type', 's', 'u', 'ns', 'nu'});
+m = keepfields(m, {'Type', 'k', 's', 'u', 'nk', 'ns', 'nu'});
 nu = m.nu;
+
+% k
+assert(numel(k) == m.nk, 'KroneckerBio:Experiment:k', 'k must a vector with length equal to m.nk')
+k = vec(k);
 
 % s
 assert(numel(s) == m.ns, 'KroneckerBio:Experiment:s', 's must a vector with length equal to m.ns')
@@ -94,9 +108,11 @@ assert(ischar(name), 'KroneckerBio:Experiment:name', 'name must be a string')
 con.Type = 'Experiment:SteadyState';
 con.Name = name;
 con.nu = m.nu;
+con.nk = m.nk;
 con.ns = m.ns;
 con.nq = numel(inp.q);
 con.nh = numel(dos.h);
+con.k  = k;
 con.s  = s;
 con.q  = inp.q;
 con.h  = dos.h;
@@ -113,8 +129,8 @@ con.Update = @update;
 con.private.BasalInput = basal_input;
 con.private.TimeScale = time_scale;
 
-    function con_out = update(s, q, h)
-        con_out = experimentSteadyState(m, s, basal_input, inp.Update(q), dos.Update(h), time_scale, name);
+    function con_out = update(k, s, q, h)
+        con_out = experimentSteadyState(m, k, s, basal_input, inp.Update(q), dos.Update(h), time_scale, name);
     end
 
 end

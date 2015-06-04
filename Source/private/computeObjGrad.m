@@ -1,4 +1,5 @@
 function [G, D] = computeObjGrad(m, con, obj, opts)
+% Assumes a single m
 % Switch to Adjoint method if requested
 if opts.UseAdjoint
     warning('UseAdjoint not implemented/modified for changes in param specs.')

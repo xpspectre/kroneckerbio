@@ -67,8 +67,10 @@ suptitle('Generated Test Data') % this function requires bioinformatics toolbox
 
 % Fit multiple objective functions and experiments
 opts = [];
-opts.UseParams = true(nk, 1);
-opts.UseSeeds = true(ns, 1); % default is to fit all the seeds
+opts.Verbose = 2;
+% opts.UseParams = true(nk, nExpts);
+opts.UseParams = [1:nExpts;ones(1,nExpts)]; % more complicated parameter fitting
+opts.UseSeeds = true(ns, nExpts); % default is to fit all the seeds
 opts.UseAdjoint = false; % adjoint fails with current setup
 mFit = FitObjective(m, expts, objs, opts);
 

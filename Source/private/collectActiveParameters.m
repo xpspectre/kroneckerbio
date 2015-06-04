@@ -1,4 +1,5 @@
 function T = collectActiveParameters(m, con, UseParams, UseSeeds, UseInputControls, UseDoseControls)
+% Get vector of parameters optimizer will optimize
 
 % Constants
 nCon = size(con, 1);
@@ -6,9 +7,6 @@ nk   = m.nk;
 ns   = m.ns;
 
 % Store complete parameter sets
-% Rate parameters come from m by default (when experiments are made) but can be
-%   modified by experiments (TODO: unify parameters)
-%k = m.k;
 k = zeros(nk, nCon);
 for i = 1:nCon
     k(:,i) = con(i).k;
@@ -33,8 +31,15 @@ for i = 1:nCon
     h(index+1:index+con(i).nh) = con(i).h;
 end
 
+% Get parameters specified to be unique from each set
+
+% Rate parameters come from m by default (when experiments are made) but can be
+%   modified by experiments (TODO: unify parameters)
+% If multiple experiments specify a parameter that's shared, take the 1st one
+%   TODO: warn if this happens
+
 % Construct starting variable parameter set
-T = [vec(k(UseParams));
+T = [k2kVec(k, UseParams);
      vec(s(UseSeeds));
      q(cat(1, UseInputControls{:}));
      h(cat(1, UseDoseControls{:}))];

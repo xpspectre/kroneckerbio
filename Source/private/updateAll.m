@@ -6,22 +6,23 @@ function [m, conNew] = updateAll(m, con, T, UseParams, UseSeeds, UseInputControl
 %   This function performs the often needed task of updating m, con, and
 %   obj whenever the active parameters T change.
 
+% Handle vectors of models
+% Below, assume all models have the same structure but different k and
+%   associated derivatives
+nm = length(m);
+
 % Constants
-nk = m.nk;
-ns = m.ns;
+nk = m(1).nk;
+ns = m(1).ns;
 nCon = size(con, 1);
-nTk = nnz(UseParams);
+nTk = getnTk(UseParams);
 nTs = nnz(UseSeeds);
 [UseInputControls, nTq] = fixUseControls(UseInputControls, nCon, cat(1,con.nq));
 [UseDoseControls, nTh] = fixUseControls(UseDoseControls, nCon, cat(1,con.nh));
 nT = nTk + nTs + nTq + nTh;
 
 % Update parameter sets
-k = zeros(nk,nCon);
-for i = 1:nCon
-    k(:,i) = con(i).k;
-end
-k(UseParams) = T(1:nTk);
+k = kVec2k(T(1:nTk), UseParams);
 
 s = zeros(ns,nCon);
 for i = 1:nCon
@@ -49,7 +50,10 @@ end
 
 % Update model
 %   Closures in m read this k
-m = m.Update(k);
+%   Note: currently, k is a matrix of all k's in cons
+for i = 1:nm
+    m(i) = m(i).Update(k(:,i));
+end
 
 % Update experimental conditions
 if ~isnumeric(con)

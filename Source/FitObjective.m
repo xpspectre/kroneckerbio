@@ -24,15 +24,17 @@ function [m, con, G, D] = FitObjective(m, con, obj, opts)
 %       The objective structures defining the objective functions to be
 %       evaluated.
 %   opts: [ options struct scalar {} ]
-%       .UseParams [ logical matrix nk by nCon | logical vector nk | positive integer vector {true(nk,nCon) }]
+%       .UseParams [ integer matrix nk by nCon | logical matrix nk by nCon | logical vector nk {true(nk,1)} ]
 %           Indicates the kinetic parameters that will be allowed to vary
 %           during the optimization. UseParams can be:
-%           1) logical matrix nk by nCon to indicate active parameters for each
-%               condition
-%           2) logical index vector nk to indicate all conditions have the same
-%               active parameters
-%           3) positive integer vector into nk, all conditions have the same active
-%               parameters (TODO: either deprecate or make integer matrix analog)
+%           1) integer matrix nk by nCon to indicate active parameters for each
+%               condition. In each row, different integers indicate rate
+%               parameters that differ between conditions. 0 entries indicate
+%               not fit.
+%           2) logical matrix nk by nCon to indicate active parameters for each
+%               condition, with all parameters unique.
+%           3) logical index vector nk to indicate all conditions have the same
+%               active parameters, with all parameters unique
 %       .UseSeeds [ logical matrix ns by nCon | logical vector ns | positive integer vector {true(ns,nCon)} ]
 %           Indicates the seeds that will be allowed to vary during the
 %           optimzation. UseSeeds can be:
@@ -159,12 +161,14 @@ defaultOpts.LowerBound       = 0;
 defaultOpts.UpperBound       = inf;
 defaultOpts.Aeq              = [];
 defaultOpts.beq              = [];
-defaultOpts.TolOptim         = 1e-5;
+% defaultOpts.TolOptim         = 1e-5;
+defaultOpts.TolOptim         = 1; % increase to accept good enough fit with mixed fits
 defaultOpts.Restart          = 0;
 defaultOpts.RestartJump      = 0.001;
 defaultOpts.TerminalObj      = -inf;
 
-defaultOpts.MaxStepSize      = 1;
+% defaultOpts.MaxStepSize      = 1;
+defaultOpts.MaxStepSize      = 1e-2; % decrease to avoid going in circles with mixed fits
 defaultOpts.Algorithm        = 'active-set';
 defaultOpts.MaxIter          = 1000;
 defaultOpts.MaxFunEvals      = 5000;
@@ -240,7 +244,14 @@ opts.AbsTol = fixAbsTol(opts.AbsTol, 2, opts.continuous, nx, nCon, opts.UseAdjoi
 opts.LowerBound = fixBounds(opts.LowerBound, opts.UseParams, opts.UseSeeds, opts.UseInputControls, opts.UseDoseControls);
 opts.UpperBound = fixBounds(opts.UpperBound, opts.UseParams, opts.UseSeeds, opts.UseInputControls, opts.UseDoseControls);
 
-%% Options structure for integration
+% If k is allowed to change in different conditions (opts.UseParams is a matrix), copy model and opts struct to make a vector of models
+% Otherwise, k will be the same between all experiments
+if size(opts.UseParams,2) > 1
+    if opts.Verbose; fprintf('Allowing k to vary between experiments\n'); end
+    m = repmat(m, nCon, 1);
+end
+
+%% Integration options
 intOpts = opts;
 
 %% Local optimization options
@@ -371,6 +382,7 @@ for iRestart = 1:opts.Restart+1
     % Jump parameters before restarting
     % Retain the deterministic nature of fitting by fixing the stream
     rng_state = rng;
+    That = inf2big(That); % fix -Infs (can occur if normalized and got 0)
     prodThat = prod(That); % model fingerprint
     rng(mod(prodThat/eps(prodThat)*iRestart,2^32));
     if opts.Normalized
@@ -418,20 +430,18 @@ end
         % Update parameter sets
         [m, con] = updateAll(m, con, T, opts.UseParams, opts.UseSeeds, opts.UseInputControls, opts.UseDoseControls);
         
-        % Integrate system to get objective function value
         if nargout == 1
-            G = computeObj(m, con, obj, intOpts);
+            G = computeObjectiveMultiModel(m, con, obj, intOpts);
         end
-        
-        % Integrate sensitivities or use adjoint to get objective gradient
         if nargout == 2
-            [G, D] = computeObjGrad(m, con, obj, intOpts);
+            [G, D] = computeObjectiveMultiModel(m, con, obj, intOpts);
             
             % Normalize gradient
             if opts.Normalized
                 D = vec(D) .* T;
             end
         end
+        
     end
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -448,3 +458,4 @@ end
     end
 
 end
+

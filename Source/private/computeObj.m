@@ -20,6 +20,9 @@ for i_con = 1:n_con
     % Modify opts structure
     opts_i = opts;
     
+    UseParams_i = opts.UseParams(:,i_con);
+    opts_i.UseParams = UseParams_i;
+    
     UseSeeds_i = opts.UseSeeds(:,i_con);
     opts_i.UseSeeds = UseSeeds_i;
     

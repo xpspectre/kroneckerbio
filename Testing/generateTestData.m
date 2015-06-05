@@ -21,11 +21,11 @@ for i = 1:nOutputs
         time = times(j);
         val = sim.y(time, outputIdx);
         noise = normrnd(0, sd(time, outputIdx, val));
-        measurements(i,j) = val + noise;
+        measurements(i,j) = max(val + noise, 0); % ensure nonnegative value
     end
 end
 
 % Index and reshape outputs to form objective fun expects
 outputsList = reshape(repmat(outputIdxs, nTimes, 1), nTimes*nOutputs, 1);
 timesList = repmat(times, nOutputs, 1);
-measurementsList = reshape(measurements, nTimes*nOutputs, 1);
+measurementsList = reshape(measurements',1, nTimes*nOutputs)';

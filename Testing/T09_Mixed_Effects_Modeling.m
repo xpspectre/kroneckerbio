@@ -50,7 +50,7 @@ for i = 1:nExpts
     expts(i) = expt;
     
     [outputsList, timesList, measurementsList] = generateTestData(m, expt, times, outputs, sd);
-    measurements{i} = reshape(measurementsList, 3, nTimes)';
+    measurements{i} = reshape(measurementsList, nTimes, 3);
     
     obs = observationLinearWeightedSumOfSquares(outputsList, timesList, sd, ['VariantObs' num2str(i)]);
     obj = obs.Objective(measurementsList);
@@ -68,15 +68,22 @@ suptitle('Generated Test Data') % this function requires bioinformatics toolbox
 % Fit multiple objective functions and experiments
 opts = [];
 opts.Verbose = 2;
-% opts.UseParams = true(nk, nExpts);
+opts.TolOptim = 1;
+opts.MaxStepSize = 1;
+% opts.UseParams = true(nk, 1);
 opts.UseParams = [1:nExpts;ones(1,nExpts)]; % more complicated parameter fitting
+% opts.UseParams = [1:nExpts;1:nExpts]; % more complicated parameter fitting
 opts.UseSeeds = true(ns, nExpts); % default is to fit all the seeds
 opts.UseAdjoint = false; % adjoint fails with current setup
-mFit = FitObjective(m, expts, objs, opts);
+[mFit, exptFit] = FitObjective(m, expts, objs, opts);
 
 %% Display fit results
 timesFine = linspace(0, tF, 100)';
-simFit = SimulateSystem(mFit, expts, tF);
+simFits = [];
+for i = 1:nExpts
+    simFit = SimulateSystem(mFit(i), exptFit(i), tF);
+    simFits = [simFits; simFit];
+end
 
 figure
 hold on
@@ -88,13 +95,14 @@ for i = 1:nExpts
 end
 % Plot fits
 for i = 1:nExpts
-    plot(timesFine, simFit(i).y(timesFine,:)')
+    plot(timesFine, simFits(i).y(timesFine,:)')
     ax = gca;
     ax.ColorOrderIndex = 1;
 end
 legend('A','B','C')
 xlabel('Time')
 ylabel('Amount')
+title('Varying seeds, varying kf')
 
 %% Construct model variants
 

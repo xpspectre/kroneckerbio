@@ -161,14 +161,12 @@ defaultOpts.LowerBound       = 0;
 defaultOpts.UpperBound       = inf;
 defaultOpts.Aeq              = [];
 defaultOpts.beq              = [];
-% defaultOpts.TolOptim         = 1e-5;
-defaultOpts.TolOptim         = 1; % increase to accept good enough fit with mixed fits
+defaultOpts.TolOptim         = 1e-5;
 defaultOpts.Restart          = 0;
 defaultOpts.RestartJump      = 0.001;
 defaultOpts.TerminalObj      = -inf;
 
-% defaultOpts.MaxStepSize      = 1;
-defaultOpts.MaxStepSize      = 1e-2; % decrease to avoid going in circles with mixed fits
+defaultOpts.MaxStepSize      = 1;
 defaultOpts.Algorithm        = 'active-set';
 defaultOpts.MaxIter          = 1000;
 defaultOpts.MaxFunEvals      = 5000;
@@ -250,6 +248,7 @@ if size(opts.UseParams,2) > 1
     if opts.Verbose; fprintf('Allowing k to vary between experiments\n'); end
     m = repmat(m, nCon, 1);
 end
+[m, con] = updateAll(m, con, T0, opts.UseParams, opts.UseSeeds, opts.UseInputControls, opts.UseDoseControls);
 
 %% Integration options
 intOpts = opts;

@@ -1,5 +1,6 @@
 function T = collectActiveParameters(m, con, UseParams, UseSeeds, UseInputControls, UseDoseControls)
 % Get vector of parameters optimizer will optimize
+% Gets starting k's from conditions
 
 % Constants
 nCon = size(con, 1);

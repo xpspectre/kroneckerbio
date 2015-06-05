@@ -9,10 +9,18 @@ function T = mapT2Ti(Ti, i, opts)
 UseParams_i = logical(opts.UseParams(:,i));
 nki = sum(UseParams_i);
 % Make dummy k with all 0's + condition i's values
-ki = zeros(size(opts.UseParams));
-ki(UseParams_i,i) = Ti(1:nki);
-
-ki = k2kVec(ki, opts.UseParams);
+k = zeros(size(opts.UseParams,1),1);
+k(UseParams_i) = Ti(1:nki);
+% Write elements of k matrix to kT
+kMap = getkMap(opts.UseParams);
+nkT = max(max(kMap));
+kMap = kMap(:,i);
+ki = zeros(nkT,1);
+for j = 1:length(k)
+    if kMap(j) ~= 0
+        ki(kMap(j)) = k(j);
+    end
+end
 
 % s
 sStart = nnz(opts.UseSeeds(:,1:i-1))+1; % position to start at in seeds part of T

@@ -1,15 +1,12 @@
-function con = experimentInitialValue(m, k, s, inp, dos, name)
+function con = experimentInitialValue(m, s, inp, dos, name)
 %experimentInitialValue Construct a KroneckerBio experimental conditions
 %   structure describing an initial value problem
 %
-%   con = experimentInitialValue(m, k, s, inp, dos, name)
+%   con = experimentInitialValue(m, s, inp, dos, name)
 %
 %   Inputs
 %   m: [ model struct scalar ]
 %       The KroneckerBio model for which these experiments will be run
-%   k: [ nonnegative vector nk ]
-%       Default = m.k
-%       The value of the rate parameters (TODO: unify parameters)
 %   s: [ nonnegative vector ns ]
 %       Default = m.s
 %       The values of the seed parameters
@@ -34,25 +31,19 @@ function con = experimentInitialValue(m, k, s, inp, dos, name)
 % (c) 2015 David R Hagen, David Flowers, & Bruce Tidor
 % This work is released under the MIT license.
 
-if nargin < 6
-    kname = [];
-    if nargin < 5
+if nargin < 5
+    name = [];
+    if nargin < 4
         dos = [];
-        if nargin < 4
+        if nargin < 3
             inp = [];
-            if nargin < 3
+            if nargin < 2
                 s = [];
-                if nargin < 2
-                    k = [];
-                end
             end
         end
     end
 end
 
-if isempty(k)
-    k = m.k;
-end
 if isempty(s)
     s = m.s;
 end
@@ -68,12 +59,9 @@ end
 
 % m
 assert(isscalar(m) && is(m, 'Model'), 'KroneckerBio:Experiment:m', 'm must be a Model')
-m = keepfields(m, {'Type', 'k', 's', 'u', 'nk', 'ns', 'nu'});
+m = keepfields(m, {'Type', 'Name', 's', 'u', 'ns', 'nu'});
 nu = m.nu;
-
-% k
-assert(numel(k) == m.nk, 'KroneckerBio:Experiment:k', 'k must a vector with length equal to m.nk')
-k = vec(k);
+parentModelName = m.Name;
 
 % s
 assert(numel(s) == m.ns, 'KroneckerBio:Experiment:s', 's must a vector with length equal to m.ns')
@@ -96,12 +84,11 @@ assert(ischar(name), 'KroneckerBio:Experiment:name', 'name must be a string')
 % Build experiment
 con.Type = 'Experiment:InitialValue';
 con.Name = name;
+con.ParentModelName = parentModelName;
 con.nu = m.nu;
-con.nk = m.nk;
 con.ns = m.ns;
 con.nq = numel(inp.q);
 con.nh = numel(dos.h);
-con.k  = k;
 con.s  = s;
 con.q  = inp.q;
 con.h  = dos.h;
@@ -119,8 +106,8 @@ con.Discontinuities = vec(unique([inp.discontinuities; dos.discontinuities]));
 con.Update = @update;
 con.private = [];
 
-    function con_out = update(k, s, q, h)
-        con_out = experimentInitialValue(m, k, s, inp.Update(q), dos.Update(h), name);
+    function con_out = update(s, q, h)
+        con_out = experimentInitialValue(m, s, inp.Update(q), dos.Update(h), name);
     end
 
 end

@@ -17,6 +17,7 @@ obs.Complex = false;
 
 obs.tF = 0;
 obs.DiscreteTimes = zeros(1,0);
+obs.Outputs = [];
 
 obs.ne = 0;
 obs.Events = @empty_event;

@@ -1,4 +1,4 @@
-function [m, con, G, D] = FitObjective(m, con, obj, opts)
+function [m, con, G, D] = FitObjective(varargin)
 %FitObjective Optimize the parameters of a model to minimize a set of
 %   objective functions
 %
@@ -16,6 +16,7 @@ function [m, con, G, D] = FitObjective(m, con, obj, opts)
 %   objective function while keeping with the bounds.
 %
 %   Inputs
+%   (old method)
 %   m: [ model struct scalar ]
 %       The KroneckerBio model that will be simulated
 %   con: [ experiment struct vector ]
@@ -23,27 +24,10 @@ function [m, con, G, D] = FitObjective(m, con, obj, opts)
 %   obj: [ objective struct matrix ]
 %       The objective structures defining the objective functions to be
 %       evaluated.
+%   (new method)
+%   fit: [ FitObject ]
+%   (common)
 %   opts: [ options struct scalar {} ]
-%       .UseParams [ integer matrix nk by nCon | logical matrix nk by nCon | logical vector nk {true(nk,1)} ]
-%           Indicates the kinetic parameters that will be allowed to vary
-%           during the optimization. UseParams can be:
-%           1) integer matrix nk by nCon to indicate active parameters for each
-%               condition. In each row, different integers indicate rate
-%               parameters that differ between conditions. 0 entries indicate
-%               not fit.
-%           2) logical matrix nk by nCon to indicate active parameters for each
-%               condition, with all parameters unique.
-%           3) logical index vector nk to indicate all conditions have the same
-%               active parameters, with all parameters unique
-%       .UseSeeds [ logical matrix ns by nCon | logical vector ns | positive integer vector {true(ns,nCon)} ]
-%           Indicates the seeds that will be allowed to vary during the
-%           optimzation. UseSeeds can be:
-%           1) logical matrix ns by nCon to indicate active seed parameters for each
-%               condition
-%           2) logical index vector ns to indicate all conditions have the same
-%               active seed parameters
-%           3) positive integer vector into ns, all conditions have the same active
-%               seed parameters (TODO: either deprecate or make integer matrix analog)
 %       .UseInputControls [ cell vector nCon of logical vectors or positive 
 %                           integer vectors | logical vector nq | positive 
 %                           integer vector {[]} ]
@@ -134,33 +118,23 @@ function [m, con, G, D] = FitObjective(m, con, obj, opts)
 
 %% Work-up
 % Clean up inputs
-assert(nargin >= 3, 'KroneckerBio:FitObjective:TooFewInputs', 'FitObjective requires at least 3 input arguments')
-if nargin < 4
-    opts = [];
+if nargin == 4
+    fit = FitObject.buildFitObject(varargin{1}, varargin{2}, varargin{3}, varargin{4});
+    opts = varargin{4};
+elseif nargin == 2
+    fit = varargin{1};
+    opts = varargin{2};
 end
 
-assert(isscalar(m), 'KroneckerBio:FitObjective:MoreThanOneModel', 'The model structure must be scalar')
-
 % Default options
-defaultOpts.Verbose          = 1;
+defaultOpts.Verbose          = 2;
 
 defaultOpts.RelTol           = [];
 defaultOpts.AbsTol           = [];
 
-defaultOpts.UseParams        = nan;
-defaultOpts.UseSeeds         = nan;
-defaultOpts.UseInputControls = nan;
-defaultOpts.UseDoseControls  = nan;
-
-defaultOpts.ObjWeights       = ones(size(obj));
-
 defaultOpts.Normalized       = true;
 defaultOpts.UseAdjoint       = true;
 
-defaultOpts.LowerBound       = 0;
-defaultOpts.UpperBound       = inf;
-defaultOpts.Aeq              = [];
-defaultOpts.beq              = [];
 defaultOpts.TolOptim         = 1e-5;
 defaultOpts.Restart          = 0;
 defaultOpts.RestartJump      = 0.001;
@@ -188,25 +162,6 @@ opts.GlobalOpts = mergestruct(defaultGlobalOpts, opts.GlobalOpts);
 verbose = logical(opts.Verbose);
 opts.Verbose = max(opts.Verbose-1,0);
 
-% Constants
-nx = m.nx;
-nk = m.nk;
-ns = m.ns;
-nCon = numel(con);
-nObj = size(obj,1);
-
-% Ensure UseParams is logical vector
-[opts.UseParams, nTk] = fixUseParams(opts.UseParams, nk, nCon);
-
-% Ensure UseSeeds is a logical matrix
-[opts.UseSeeds, nTs] = fixUseSeeds(opts.UseSeeds, ns, nCon);
-
-% Ensure UseControls is a cell vector of logical vectors
-[opts.UseInputControls, nTq] = fixUseControls(opts.UseInputControls, nCon, cat(1,con.nq));
-[opts.UseDoseControls, nTh] = fixUseControls(opts.UseDoseControls, nCon, cat(1,con.nh));
-
-nT = nTk + nTs + nTq + nTh;
-
 % Ensure Restart is a positive integer
 if ~(opts.Restart >= 0)
     opts.Restart = 0;
@@ -223,31 +178,12 @@ if isnumeric(opts.RestartJump)
     opts.RestartJump = @(iter,G)(opts.RestartJump);
 end
 
-% Refresh conditions and objectives
-con = refreshCon(m, con);
-
 % Construct starting variable parameter set
 T0 = collectActiveParameters(m, con, opts.UseParams, opts.UseSeeds, opts.UseInputControls, opts.UseDoseControls);
 
-% Fix integration type
-[opts.continuous, opts.complex, opts.tGet] = fixIntegrationType(con, obj);
-
-% RelTol
-opts.RelTol = fixRelTol(opts.RelTol);
-
 % Fix AbsTol to be a cell array of vectors appropriate to the problem
-opts.AbsTol = fixAbsTol(opts.AbsTol, 2, opts.continuous, nx, nCon, opts.UseAdjoint, opts.UseParams, opts.UseSeeds, opts.UseInputControls, opts.UseDoseControls);
+% opts.AbsTol = fixAbsTol(opts.AbsTol, 2, opts.continuous, nx, nCon, opts.UseAdjoint, opts.UseParams, opts.UseSeeds, opts.UseInputControls, opts.UseDoseControls);
 
-% Bounds
-opts.LowerBound = fixBounds(opts.LowerBound, opts.UseParams, opts.UseSeeds, opts.UseInputControls, opts.UseDoseControls);
-opts.UpperBound = fixBounds(opts.UpperBound, opts.UseParams, opts.UseSeeds, opts.UseInputControls, opts.UseDoseControls);
-
-% If k is allowed to change in different conditions (opts.UseParams is a matrix), copy model and opts struct to make a vector of models
-% Otherwise, k will be the same between all experiments
-if size(opts.UseParams,2) > 1
-    if opts.Verbose; fprintf('Allowing k to vary between experiments\n'); end
-    m = repmat(m, nCon, 1);
-end
 [m, con] = updateAll(m, con, T0, opts.UseParams, opts.UseSeeds, opts.UseInputControls, opts.UseDoseControls);
 
 %% Integration options
@@ -427,13 +363,15 @@ end
         end
         
         % Update parameter sets
-        [m, con] = updateAll(m, con, T, opts.UseParams, opts.UseSeeds, opts.UseInputControls, opts.UseDoseControls);
+%         [m, con] = updateAll(m, con, T, opts.UseParams, opts.UseSeeds, opts.UseInputControls, opts.UseDoseControls);
+        fit.updateParams
         
         if nargout == 1
-            G = computeObjectiveMultiModel(m, con, obj, intOpts);
+            G = fit.computeObjective;
         end
         if nargout == 2
-            [G, D] = computeObjectiveMultiModel(m, con, obj, intOpts);
+            [G, D] = fit.computeObjective;
+%             computeObjectiveMultiModel(m, con, obj, intOpts);
             
             % Normalize gradient
             if opts.Normalized

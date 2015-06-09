@@ -21,16 +21,12 @@ function con = experimentZero(m)
 %           The time at which this experiment ends.
 %       .nu [ whole scalar ]
 %           The number of inputs
-%       .nk [ whole scalar ]
-%           The number of rate parameters
 %       .ns [ whole scalar ]
 %           The number of seed parameters
 %       .nq [ whole scalar ]
 %           The number of input control parameters
 %       .nh [ whole scalar ]
 %           The number of dose control parameters
-%       .k [ nonnegative vector nk ]
-%           The values of the rate parameters
 %       .s [ nonnegative vector ns ]
 %           The values of the seed parameters
 %       .q [ real vector nq ]
@@ -86,8 +82,8 @@ function con = experimentZero(m)
 
 % Special case of numeric inputs
 if isnumeric(m)
-    con = emptystruct(m, 'Type', 'Name', 'nu', 'nk', 'ns', 'nq', 'nh', 'k', 's', 'q', 'h', 'u', 'dudq', 'd2udq2', 'd', 'dddh', 'd2ddh2', 'inp', 'dos', 'SteadyState', 'Periodic', 'Discontinuities', 'Update', 'private');
+    con = emptystruct(m, 'Type', 'Name', 'ParentModelName', 'nu', 'ns', 'nq', 'nh', 's', 'q', 'h', 'u', 'dudq', 'd2udq2', 'd', 'dddh', 'd2ddh2', 'inp', 'dos', 'SteadyState', 'Periodic', 'Discontinuities', 'Update', 'private');
     return
 end
 
-con = experimentInitialValue(m, [], [], [], [], 'Zero');
+con = experimentInitialValue(m, [], [], [], 'Zero');

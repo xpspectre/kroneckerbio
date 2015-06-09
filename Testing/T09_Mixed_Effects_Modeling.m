@@ -3,8 +3,11 @@
 clear; close all; clc
 rng('default')
 
+%% Initialize fit object
+fit = FitObject('T09_Mixed_Effects_Fit');
+
 %% Construct equilibrium experiment A + B <-> C with seeds
-m = InitializeModel('Equilibrium');
+m = InitializeModel('Base');
 
 m = AddCompartment(m, 'Solution', 3, 1);
 
@@ -30,37 +33,46 @@ m = FinalizeModel(m);
 ns = m.ns;
 nk = m.nk;
 
-%% Multiple models and experiments (using old notation)
-% Set up experiments and generate some test data to fit
-% times = [0.1, 1];
+opts = [];
+opts.LowerBound = 1e-3;
+opts.UpperBound = 1e3;
+
+fit.addModel(m, opts)
+
+%% Set up experimental conditions and generate some test data for multi-"participant" fitting
 tF = 1;
 times = linspace(0, tF, 5)';
 outputs = {'A','B','C'};
 sd = sdLinear(0.05, 0.1);
 
-nExpts = 4;
+nCon = 4;
 nTimes = length(times);
-expts(nExpts,1) = experimentZero(m);
-objs = objectiveZero([nExpts,nExpts]);
-measurements = cell(nExpts,1); % for plotting
-for i = 1:nExpts
-%     ici = [1+rand, 1+rand, 0]'; % randomized ics
-    ici = [1, 2, 0]'; % same ics but generateTestData will randomize measuremens
-    expt = experimentInitialValue(m, [], ici, [], [], ['VariantExpt' num2str(i)]); % modified ICs
-    expts(i) = expt;
+measurements = cell(nCon,1); % for plotting
+for i = 1:nCon
     
-    [outputsList, timesList, measurementsList] = generateTestData(m, expt, times, outputs, sd);
+    % Create sample experimental condition and generate some test data
+    ici = [1, 2, 0]'; % same ics but generateTestData will randomize measuremens
+    con = experimentInitialValue(m, ici, [], [], ['VariantCon' num2str(i)]); % modified ICs
+    
+    [outputsList, timesList, measurementsList] = generateTestData(m, con, times, outputs, sd);
     measurements{i} = reshape(measurementsList, nTimes, 3);
     
     obs = observationLinearWeightedSumOfSquares(outputsList, timesList, sd, ['VariantObs' num2str(i)]);
     obj = obs.Objective(measurementsList);
-    objs(i,i) = obj;
+    
+    opts = [];
+    opts.Verbose = 2;
+    opts.UseParams = [i;1]; % different kf, same kr
+    opts.UseSeeds = [i;1;0]; % all different seeds
+    
+    fit.addFitConditionData(obj, con, opts);
+    
 end
 
 % Plot test data
 figure
-for i = 1:nExpts
-    subplot(1, nExpts, i)
+for i = 1:nCon
+    subplot(1, nCon, i)
     plot(times, measurements{i})
 end
 suptitle('Generated Test Data') % this function requires bioinformatics toolbox
@@ -70,17 +82,13 @@ opts = [];
 opts.Verbose = 2;
 opts.TolOptim = 1;
 opts.MaxStepSize = 1;
-% opts.UseParams = true(nk, 1);
-opts.UseParams = [1:nExpts;ones(1,nExpts)]; % more complicated parameter fitting
-% opts.UseParams = [1:nExpts;1:nExpts]; % more complicated parameter fitting
-opts.UseSeeds = true(ns, nExpts); % default is to fit all the seeds
 opts.UseAdjoint = false; % adjoint fails with current setup
-[mFit, exptFit] = FitObjective(m, expts, objs, opts);
+[mFit, exptFit] = FitObjective(fit, opts);
 
 %% Display fit results
 timesFine = linspace(0, tF, 100)';
 simFits = [];
-for i = 1:nExpts
+for i = 1:nCon
     simFit = SimulateSystem(mFit(i), exptFit(i), tF);
     simFits = [simFits; simFit];
 end
@@ -88,13 +96,13 @@ end
 figure
 hold on
 % Plot test data
-for i = 1:nExpts
+for i = 1:nCon
     plot(times, measurements{i}, '+')
     ax = gca;
     ax.ColorOrderIndex = 1;
 end
 % Plot fits
-for i = 1:nExpts
+for i = 1:nCon
     plot(timesFine, simFits(i).y(timesFine,:)')
     ax = gca;
     ax.ColorOrderIndex = 1;

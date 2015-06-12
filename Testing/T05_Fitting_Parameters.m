@@ -31,7 +31,9 @@ obs = observationLinearWeightedSumOfSquares(outputList, timesList, sd, 'DefaultO
 obj = obs.Objective(measurements);
 
 %% Fit
-mFit = FitObjective(m, con, obj);
+opts = [];
+opts.UseAdjoint = false;
+mFit = FitObjective(m, con, obj, opts);
 
 % Display fit results
 tF = 1;

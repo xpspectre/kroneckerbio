@@ -34,8 +34,6 @@ ns = m.ns;
 nk = m.nk;
 
 opts = [];
-opts.LowerBound = 1e-3;
-opts.UpperBound = 1e3;
 
 fit.addModel(m, opts)
 
@@ -45,7 +43,7 @@ times = linspace(0, tF, 5)';
 outputs = {'A','B','C'};
 sd = sdLinear(0.05, 0.1);
 
-nCon = 4;
+nCon = 3;
 nTimes = length(times);
 measurements = cell(nCon,1); % for plotting
 for i = 1:nCon
@@ -63,7 +61,7 @@ for i = 1:nCon
     opts = [];
     opts.Verbose = 2;
     opts.UseParams = [i;1]; % different kf, same kr
-    opts.UseSeeds = [i;1;0]; % all different seeds
+    opts.UseSeeds = [i;i;i]; % all different seeds
     
     fit.addFitConditionData(obj, con, opts);
     
@@ -83,13 +81,13 @@ opts.Verbose = 2;
 opts.TolOptim = 1;
 opts.MaxStepSize = 1;
 opts.UseAdjoint = false; % adjoint fails with current setup
-[mFit, exptFit] = FitObjective(fit, opts);
+fitOut = FitObjective(fit, opts);
 
 %% Display fit results
 timesFine = linspace(0, tF, 100)';
 simFits = [];
 for i = 1:nCon
-    simFit = SimulateSystem(mFit(i), exptFit(i), tF);
+    simFit = SimulateSystem(fitOut.Models(i), fitOut.Conditions(i), tF);
     simFits = [simFits; simFit];
 end
 

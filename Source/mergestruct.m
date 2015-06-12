@@ -28,7 +28,7 @@ oldfields = fieldnames(oldstruct);
 for i = 1:length(newfields)
     % If fields are the same regardless of case, keep the old case and new
     % value.
-    index = find(strcmpi(oldfields, newfields{i}), 1, 'first');
+    index = find(strcmp(oldfields, newfields{i}), 1, 'first');
     if ~isempty(index)
         % Match was found
         combostruct.(oldfields{index}) = newstruct.(newfields{i});

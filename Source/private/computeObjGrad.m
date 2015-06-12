@@ -2,7 +2,7 @@ function [G, D] = computeObjGrad(m, con, obj, opts)
 % Assumes a single m
 % Switch to Adjoint method if requested
 if opts.UseAdjoint
-    warning('UseAdjoint not implemented/modified for changes in param specs.')
+    warning('UseAdjoint not implemented/modified for changes in fit objective.')
     [G, D] = computeObjSensAdj(m, con, obj, opts);
     return
 end
@@ -10,130 +10,117 @@ end
 % Continue with forward method
 verbose_all = max(opts.Verbose-1,0);
 
+% Process options
+% Note: this currently acts as a shim to existing code - a lot of this can be
+% cleaned up in the future
+opts.UseParams        = logical(con.ParamsSpec{1});
+opts.UseSeeds         = logical(con.ParamsSpec{2});
+opts.UseInputControls = logical(con.ParamsSpec{3});
+opts.UseDoseControls  = logical(con.ParamsSpec{4});
+
+opts.continuous = any(obj(:).Continuous);
+opts.RelTol = con.RelTol;
+AbsTol = fixAbsTol(con.AbsTol, 2, opts.continuous, m.nx, 1, opts.UseAdjoint, opts.UseParams, opts.UseSeeds, {opts.UseInputControls}, {opts.UseDoseControls});
+opts.AbsTol = AbsTol{1};
+opts.ObjWeights = [obj(:).Weight];
+
 % Constants
 nx = m.nx;
 ny = m.ny;
 nTk = nnz(opts.UseParams);
 nTs = nnz(opts.UseSeeds);
-nTq = nnz(cat(1,opts.UseInputControls{:}));
-nTh = nnz(cat(1,opts.UseDoseControls{:}));
-nT  = nTk + nTs + nTq + nTh;
-n_con = numel(con);
-n_obj = size(obj,1);
-
-% Initialize variables
-G = 0;
-D = zeros(nT,1);
+nTq = nnz(opts.UseInputControls);
+nTh = nnz(opts.UseDoseControls);
+nT = nTk + nTs + nTq + nTh;
+Tmap = {opts.UseParams; opts.UseSeeds; opts.UseInputControls; opts.UseDoseControls};
+nObj = length(obj);
 
 if opts.Verbose; fprintf('Integrating sensitivities:\n'); end
-for i_con = 1:n_con
-    if verbose_all; tic; end
-    
-    % Modify opts structure
-    opts_i = opts;
-    opts_i.AbsTol = opts.AbsTol{i_con};
-    opts_i.ObjWeights = opts.ObjWeights(:,i_con);
-    
-    UseParams_i = opts.UseParams(:,i_con);
-    opts_i.UseParams = UseParams_i;
-    inTk = nnz(UseParams_i);
-    
-    UseSeeds_i = opts.UseSeeds(:,i_con);
-    opts_i.UseSeeds = UseSeeds_i;
-    inTs = nnz(UseSeeds_i);
-    
-    UseInputControls_i = opts.UseInputControls{i_con};
-    opts_i.UseInputControls = UseInputControls_i;
-    inTq = nnz(UseInputControls_i);
-    
-    UseDoseControls_i = opts.UseDoseControls{i_con};
-    opts_i.UseDoseControls = UseDoseControls_i;
-    inTh = nnz(UseDoseControls_i);
-    
-    inT = inTk + inTs + inTq + inTh;
+if verbose_all; tic; end
 
-    % Integrate
-    ints = integrateAllSens(m, con(i_con), obj(:,i_con), opts_i);
-    
-    % Compute continuous term
-    % Extract continuous term
-    if opts.continuous(i_con)
-        G_cont = ints(1).sol.y(nx+1,end);
-        
-        dGdTStart = nx+1+nx*inT+1;
-        dGdTEnd   = nx+1+nx*inT+inT;
-        D_cont = ints(1).sol.y(dGdTStart:dGdTEnd,end);
-    else
-        G_cont = 0;
-        D_cont = zeros(nT,1);
-    end
-    
-    % Compute discrete term
-    G_disc = 0;
-    D_disc = zeros(inT,1); % T_
+% Integrate
+ints = integrateAllSens(m, con, obj, opts);
 
-    discrete_times_all = cell(n_obj,1);
-    for i_obj = 1:n_obj
-        [G_disc_i, temp] = obj(i_obj,i_con).G(ints(i_obj));
-        discrete_times_all{i_obj} = row(unique(temp));
-        G_disc = G_disc + opts.ObjWeights(i_obj,i_con) * G_disc_i;
-        
-        Dk_i = obj(i_obj,i_con).dGdk(ints(i_obj));
-        Ds_i = obj(i_obj,i_con).dGds(ints(i_obj));
-        Dq_i = obj(i_obj,i_con).dGdq(ints(i_obj));
-        Dh_i = obj(i_obj,i_con).dGdh(ints(i_obj));
-        D_disc_i = [Dk_i(UseParams_i); Ds_i(UseSeeds_i); Dq_i(UseInputControls_i); Dh_i(UseDoseControls_i)];
-
-        n_disc = numel(discrete_times_all{i_obj});
-        for i_disc = 1:n_disc
-            ti = discrete_times_all{i_obj}(i_disc);
-            if obj(i_obj).Complex
-                dydT_i = reshape(ints(i_obj).dydT(ti), ny, inT);
-            else
-                dydT_i = reshape(ints(i_obj).dydT(:,i_disc), ny, inT);
-            end
-            
-            dGdy_i = row(obj(i_obj,i_con).dGdy(ti, ints(i_obj)));
-            
-            % D = sum(dGdy(t) *{y.y} dydT(t), t) + dGdT
-            D_disc_i = D_disc_i + vec(dGdy_i * dydT_i); % _y * y_T -> _T -> T_
-        end
-        
-        D_disc = D_disc + opts.ObjWeights(i_obj,i_con) * D_disc_i;
-    end
+% Extract continuous term
+if opts.continuous
+    error('Continuous objective functions have not been updated')
+    G_cont = ints(1).sol.y(nx+1,end);
     
-    % Sum discrete and continuous terms
-    Di = zeros(nT,1);
-    
-    % k parameters are different
-    ind_Tk_start = sum(sum(opts.UseParams(:,1:i_con-1)));
-    inds_k = 1 : ind_Tk_start+1 : ind_Tk_start+inTk;
-    inds_ki = 1 : inTk;
-    Di(inds_k) = D_cont(inds_ki) + D_disc(inds_ki);
-    
-    % s parameters are different
-    ind_Ts_start = inTk + sum(sum(opts.UseSeeds(:,1:i_con-1)));
-    inds_s = ind_Ts_start+1 : ind_Ts_start+inTs;
-    inds_si = inTk+1 : inTk+inTs;
-    Di(inds_s) = D_cont(inds_si) + D_disc(inds_si);
-    
-    % q parameters are different
-    Tqind = inTk + nTs + sum(cellfun(@sum, opts.UseInputControls(1:i_con-1)));
-    inds_q = Tqind+1 : Tqind+inTq;
-    inds_qi = inTk+inTs+1 : inTk+inTs+inTq;
-    Di(inds_q) = D_cont(inds_qi) + D_disc(inds_qi);
-    
-    % h parameters are different
-    Thind = inTk + nTs + nTq + sum(cellfun(@sum, opts.UseDoseControls(1:i_con-1)));
-    inds_h = Thind+1 : Thind+inTh;
-    inds_hi = inTk+inTs+inTq+1 : inT;
-    Di(inds_h) = D_cont(inds_hi) + D_disc(inds_hi);
-    
-    % Add to cumulative goal value
-    G = G + G_cont + G_disc;
-    D = D + Di;
-    
-    if verbose_all; fprintf('iCon = %d\t|dGdT| = %g\tTime = %0.2f\n', i_con, norm(D_cont + D_disc), toc); end
+    dGdTStart = nx+1+nx*nT+1;
+    dGdTEnd   = nx+1+nx*nT+nT;
+    D_cont = ints(1).sol.y(dGdTStart:dGdTEnd,end);
+else
+    G_cont = 0;
+    D_cont = zeros(nT,1);
 end
 
+% Compute discrete term
+G_disc = 0;
+D_disc = zeros(nT,1);
+
+discrete_times_all = cell(nObj,1);
+for i = 1:nObj
+    [G_disc_i, temp] = obj(i).G(ints(i));
+    discrete_times_all{i} = row(unique(temp));
+    G_disc = G_disc + opts.ObjWeights(i) * G_disc_i;
+    
+    Dk_i = obj(i).dGdk(ints(i));
+    Ds_i = obj(i).dGds(ints(i));
+    Dq_i = obj(i).dGdq(ints(i));
+    Dh_i = obj(i).dGdh(ints(i));
+    
+    D_disc_i = [Dk_i(opts.UseParams); Ds_i(opts.UseSeeds); Dq_i(opts.UseInputControls); Dh_i(opts.UseDoseControls)];
+    
+    n_disc = numel(discrete_times_all{i});
+    for j = 1:n_disc
+        ti = discrete_times_all{i}(j);
+        if obj(i).Complex
+            dydT_i = reshape(ints(i).dydT(ti), ny, nT);
+        else
+            dydT_i = reshape(ints(i).dydT(:,j), ny, nT);
+        end
+        
+        dGdy_i = row(obj(i).dGdy(ti, ints(i)));
+        
+        D_disc_i = D_disc_i + vec(dGdy_i * dydT_i); % _y * y_T -> _T -> T_
+    end
+    
+    D_disc = D_disc + opts.ObjWeights(i) * D_disc_i;
+    
+end
+
+% Sum discrete and continuous terms
+G = G_cont + G_disc;
+D = D_cont + D_disc;
+
+if verbose_all; fprintf('|dGdT| = %g\tTime = %0.2f\n', norm(D), toc); end
+
 if opts.Verbose; fprintf('Summary: |dGdT| = %g\n', norm(D)); end
+
+% Convert gradient to standard form for local T
+D = mapT2Tlocal(D, Tmap);
+
+%% Helper function
+function Tlocal = mapT2Tlocal(T, Tmap)
+% Map combined T vector of fit params for 1 condition to standard form.
+% Input:
+%   T [ nT x 1 double vector ]
+%       Format of combined fit params for this condition
+%   Tmap [ 1 x 4 cell vector of nX x 1 logical vectors ]
+%       Format of which params are used
+% Output:
+%   Tlocal [ 1 x 4 cell vector of nX x 1 double vectors ]
+%       Format of this condition's fit params
+Tlocal = cell(1,4);
+Tidx = 0;
+for i = 1:4
+    Tstart = Tidx + 1;
+    Tend = Tstart + nnz(Tmap{i}) - 1;
+    Tsub = T(Tstart:Tend);
+    
+    Tlocal_i = zeros(length(Tmap{i}),1);
+    Tlocal_i(Tmap{i}) = Tsub;
+    Tlocal{i} = Tlocal_i;
+    
+    Tidx = Tend;
+end

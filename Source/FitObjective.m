@@ -1,4 +1,4 @@
-function [m, con, G, D] = FitObjective(varargin)
+function varargout = FitObjective(varargin)
 %FitObjective Optimize the parameters of a model to minimize a set of
 %   objective functions
 %
@@ -120,44 +120,17 @@ function [m, con, G, D] = FitObjective(varargin)
 % Clean up inputs
 if nargin == 4
     fit = FitObject.buildFitObject(varargin{1}, varargin{2}, varargin{3}, varargin{4});
-    opts = varargin{4};
+elseif nargin == 3
+    fit = FitObject.buildFitObject(varargin{1}, varargin{2}, varargin{3});
 elseif nargin == 2
     fit = varargin{1};
-    opts = varargin{2};
+    fit.addOptions(varargin{2});
+elseif nargin == 1
+    fit = varargin{1};
 end
 
-% Default options
-defaultOpts.Verbose          = 2;
-
-defaultOpts.RelTol           = [];
-defaultOpts.AbsTol           = [];
-
-defaultOpts.Normalized       = true;
-defaultOpts.UseAdjoint       = true;
-
-defaultOpts.TolOptim         = 1e-5;
-defaultOpts.Restart          = 0;
-defaultOpts.RestartJump      = 0.001;
-defaultOpts.TerminalObj      = -inf;
-
-defaultOpts.MaxStepSize      = 1;
-defaultOpts.Algorithm        = 'active-set';
-defaultOpts.MaxIter          = 1000;
-defaultOpts.MaxFunEvals      = 5000;
-
-defaultOpts.GlobalOptimization = false;
-defaultOpts.GlobalOpts         = [];
-
-% Global fit default options
-defaultGlobalOpts.Algorithm = 'globalsearch';
-defaultGlobalOpts.StartPointsToRun = 'bounds-ineqs';
-defaultGlobalOpts.nStartPoints = 10;
-defaultGlobalOpts.UseParallel = false;
-defaultGlobalOpts.MaxIter = 1000; % for pattern search; fix to better default
-
-% Assign default values and make final options structs
-opts = mergestruct(defaultOpts, opts);
-opts.GlobalOpts = mergestruct(defaultGlobalOpts, opts.GlobalOpts);
+% For convenience, copy fit object's options into this space
+opts = fit.options;
 
 verbose = logical(opts.Verbose);
 opts.Verbose = max(opts.Verbose-1,0);
@@ -178,16 +151,12 @@ if isnumeric(opts.RestartJump)
     opts.RestartJump = @(iter,G)(opts.RestartJump);
 end
 
+% Collect bounds
+[LowerBound, UpperBound] = fit.collectBounds;
+
 % Construct starting variable parameter set
-T0 = collectActiveParameters(m, con, opts.UseParams, opts.UseSeeds, opts.UseInputControls, opts.UseDoseControls);
-
-% Fix AbsTol to be a cell array of vectors appropriate to the problem
-% opts.AbsTol = fixAbsTol(opts.AbsTol, 2, opts.continuous, nx, nCon, opts.UseAdjoint, opts.UseParams, opts.UseSeeds, opts.UseInputControls, opts.UseDoseControls);
-
-[m, con] = updateAll(m, con, T0, opts.UseParams, opts.UseSeeds, opts.UseInputControls, opts.UseDoseControls);
-
-%% Integration options
-intOpts = opts;
+T0 = fit.collectParams;
+nT = length(T0);
 
 %% Local optimization options
 localOpts = optimoptions('fmincon');
@@ -222,8 +191,8 @@ end
 if opts.Normalized
     % Normalize starting parameters and bounds
     T0 = log(T0);
-    opts.LowerBound = log(opts.LowerBound);
-    opts.UpperBound = log(opts.UpperBound);
+    LowerBound = log(LowerBound);
+    UpperBound = log(UpperBound);
     
     % Change relative line search bound to an absolute scale in log space
     % Because fmincon lacks an absolute option, this hack circumvents that
@@ -233,8 +202,8 @@ end
 
 %% Apply bounds to starting parameters before optimizing
 % fmincon will choose a wierd value if a starting parameter is outside the bounds
-T0(T0 < opts.LowerBound) = opts.LowerBound(T0 < opts.LowerBound);
-T0(T0 > opts.UpperBound) = opts.UpperBound(T0 > opts.UpperBound);
+T0(T0 < LowerBound) = LowerBound(T0 < LowerBound);
+T0(T0 > UpperBound) = UpperBound(T0 > UpperBound);
 
 %% Abort in rare case of no optimization
 if numel(T0) == 0
@@ -245,8 +214,10 @@ end
 %% Run optimization
 % Initialize loop
 That = T0;
-Gbest = inf;
+Gbest = Inf;
 Tbest = T0;
+
+G = fit.computeObjective;
 
 for iRestart = 1:opts.Restart+1
     % Init abort parameters
@@ -257,8 +228,7 @@ for iRestart = 1:opts.Restart+1
     %   Always needed - used as a subset/refinement of global optimization
     localProblem = createOptimProblem('fmincon', 'objective', @objective, ...
         'x0', That, 'Aeq', opts.Aeq, 'beq', opts.beq, ...
-        'lb', opts.LowerBound, 'ub', opts.UpperBound, ...
-        'options', localOpts);
+        'lb', LowerBound, 'ub', UpperBound, 'options', localOpts);
     
     % Run specified optimization
     if opts.GlobalOptimization
@@ -278,7 +248,7 @@ for iRestart = 1:opts.Restart+1
             case 'patternsearch'
                 psOpts = psoptimset('MaxIter', globalOpts.MaxIter, 'UseParallel', globalOpts.UseParallel);
                 [That, G, exitflag] = patternsearch(@objective, That, [], [], ...
-                    opts.Aeq, opts.beq, opts.LowerBound, opts.UpperBound, [], psOpts);
+                    opts.Aeq, opts.beq, LowerBound, UpperBound, [], psOpts);
             otherwise
                 error('Error:KroneckerBio:FitObjective: %s global optimization algorithm not recognized.', globalOpts.Algorithm)
         end
@@ -300,8 +270,8 @@ for iRestart = 1:opts.Restart+1
     end
     
     % Re-apply stiff bounds
-    That(That < opts.LowerBound) = opts.LowerBound(That < opts.LowerBound);
-    That(That > opts.UpperBound) = opts.UpperBound(That > opts.UpperBound);
+    That(That < LowerBound) = LowerBound(That < LowerBound);
+    That(That > UpperBound) = UpperBound(That > UpperBound);
     
     % See if these parameters are better than previous iterations
     if G < Gbest
@@ -328,9 +298,9 @@ for iRestart = 1:opts.Restart+1
     rng(rng_state);
     
     % Prevent jumps from leaving bounds
-    while any(That < opts.LowerBound) || any(That > opts.UpperBound)
-        That(That < opts.LowerBound) = 2*(opts.LowerBound(That < opts.LowerBound)) - That(That < opts.LowerBound);
-        That(That > opts.UpperBound) = 2*(opts.UpperBound(That > opts.UpperBound)) - That(That > opts.UpperBound);
+    while any(That < LowerBound) || any(That > UpperBound)
+        That(That < LowerBound) = 2*(LowerBound(That < LowerBound)) - That(That < LowerBound);
+        That(That > UpperBound) = 2*(UpperBound(That > UpperBound)) - That(That > UpperBound);
     end
 end
 
@@ -341,7 +311,17 @@ if opts.Normalized
 end
 
 % Update parameter sets
-[m, con] = updateAll(m, con, Tbest, opts.UseParams, opts.UseSeeds, opts.UseInputControls, opts.UseDoseControls);
+fit.updateParams(Tbest);
+
+% Output according to input spec
+if nargin == 4
+    varargout{1} = fit.Models;
+    varargout{2} = fit.Conditions;
+    varargout{3} = G;
+    varargout{4} = D;
+elseif nargin == 2
+    varargout{1} = fit;
+end
 
 % End of function
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -359,24 +339,18 @@ end
             T = exp(T);
         else
             % If fmincon chooses values that violate the lower bounds, force them to be equal to the lower bounds
-            T(T < opts.LowerBound) = opts.LowerBound(T < opts.LowerBound);
+            T(T < LowerBound) = LowerBound(T < LowerBound);
+            T(T > UpperBound) = UpperBound(T > UpperBound);
         end
         
         % Update parameter sets
-%         [m, con] = updateAll(m, con, T, opts.UseParams, opts.UseSeeds, opts.UseInputControls, opts.UseDoseControls);
-        fit.updateParams
+        fit.updateParams(T);
         
         if nargout == 1
             G = fit.computeObjective;
         end
         if nargout == 2
             [G, D] = fit.computeObjective;
-%             computeObjectiveMultiModel(m, con, obj, intOpts);
-            
-            % Normalize gradient
-            if opts.Normalized
-                D = vec(D) .* T;
-            end
         end
         
     end

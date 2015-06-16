@@ -259,7 +259,7 @@ classdef FitObject < handle
            %        .DoseControlUpperBound [ nh x 1 double vector {inf(nh,1)} ]
            %        .RelTol [ positive scalar double {1e-6} ]
            %            Relative tolerance of the integration
-           %        .AbsTol [ positive scalar double {1e-9} ]
+           %        .AbsTol [ positive double vector {1e-9} ]
            %            Absolute tolerance of the integration.
            %            TODO: allow specification of AbsTol for all components
            %            of integration separately, with spec for different
@@ -376,7 +376,7 @@ classdef FitObject < handle
            if ~isempty(opts.StartingSeeds) && any(sUse)
                sStart(sUse) = validateBounds(opts.StartingSeeds(sUse), bounds{1,2}(sUse), bounds{2,2}(sUse));
            end
-           if ~isempty(opts.UseInputControls) && any(qUse)
+           if ~isempty(opts.StartingInputControls) && any(qUse)
                qStart(qUse) = validateBounds(opts.UseInputControls(qUse), bounds{1,3}(qUse), bounds{2,3}(qUse));
            end
            if ~isempty(opts.StartingDoseControls) && any(hUse)
@@ -393,8 +393,8 @@ classdef FitObject < handle
            end
            
            % Add tolerances
-           condition.RelTol = opts_.RelTol;
-           condition.AbsTol = opts_.AbsTol;
+           condition.RelTol = opts.RelTol;
+           condition.AbsTol = opts.AbsTol;
            
            % Add condition to fit object
            this.Conditions = [this.Conditions; condition];

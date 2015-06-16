@@ -54,6 +54,3 @@ hold off
 legend('A','B','C','A data','B data','C data','A fit','B fit','C Fit')
 xlabel('Time')
 ylabel('Amount')
-
-%% Linearized parameter uncertainty
-F = ObjectiveInformation(mFit, con, obj);

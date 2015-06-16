@@ -61,61 +61,16 @@ end
 assert(nargin >= 3, 'KroneckerBio:ObjectiveGradient:TooFewInputs', 'ObjectiveGradient requires at least 3 input arguments')
 assert(isscalar(m), 'KroneckerBio:ObjectiveGradient:MoreThanOneModel', 'The model structure must be scalar')
 
-% Default options
-defaultOpts.Verbose          = 1;
+% Put into fit object
+fit = FitObject.buildFitObject(m, con, obj, opts);
 
-defaultOpts.RelTol           = [];
-defaultOpts.AbsTol           = [];
-
-defaultOpts.UseParams        = nan;
-defaultOpts.UseSeeds         = nan;
-defaultOpts.UseInputControls = nan;
-defaultOpts.UseDoseControls  = nan;
-
-defaultOpts.ObjWeights       = ones(size(obj));
-
-defaultOpts.Normalized       = true;
-defaultOpts.UseAdjoint       = false;
-
-opts = mergestruct(defaultOpts, opts);
-
-% Constants
-nx = m.nx;
-ns = m.ns;
-nk = m.nk;
-n_con = numel(con);
-
-% Ensure UseParams is logical vector
-[opts.UseParams, nTk] = fixUseParams(opts.UseParams, nk);
-
-% Ensure UseSeeds is a logical matrix
-[opts.UseSeeds, nTs] = fixUseSeeds(opts.UseSeeds, ns, n_con);
-
-% Ensure UseControls is a cell vector of logical vectors
-[opts.UseInputControls, nTq] = fixUseControls(opts.UseInputControls, n_con, cat(1,con.nq));
-[opts.UseDoseControls, nTh] = fixUseControls(opts.UseDoseControls, n_con, cat(1,con.nh));
-
-nT = nTk + nTs + nTq + nTh;
-
-% Refresh conditions and objectives
-con = refreshCon(m, con);
-
-% Fix integration type
-[opts.continuous, opts.complex, opts.tGet] = fixIntegrationType(con, obj);
-
-% RelTol
-opts.RelTol = fixRelTol(opts.RelTol);
-
-% Fix AbsTol to be a cell array of vectors appropriate to the problem
-opts.AbsTol = fixAbsTol(opts.AbsTol, 2, opts.continuous, nx, n_con, opts.UseAdjoint, opts.UseParams, opts.UseSeeds, opts.UseInputControls, opts.UseDoseControls);
+% For convenience, copy fit object's options into this space
+opts = fit.options;
 
 %% Run main calculation
-[unused, D] = computeObjGrad(m, con, obj, opts);
+[~, D] = fit.computeObjective;
 
 %% Normalization
 if opts.Normalized
-    T = collectActiveParameters(m, con, opts.UseParams, opts.UseSeeds, opts.UseInputControls, opts.UseDoseControls);
-    
-    % Normalize
-    D = D .* T;
+    D = D .* fit.collectParams;
 end

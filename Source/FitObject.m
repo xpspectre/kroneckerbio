@@ -1,5 +1,5 @@
 classdef FitObject < handle
-    % Specifies system for FitObjective
+    % Specifies fiting scheme for FitObjective
     % Models, Conditions, and Objectives (objective functions) are stored in
     % struct arrays. They can be directly indexed by calling code for
     % convenience.
@@ -9,8 +9,9 @@ classdef FitObject < handle
     % Contains all the default options required for fitting (previously in FitObjective)
     
     % TODO/Notes
-    % Use property listeners - as soon as something is changed/added, update
-    % meta properties like paramsMap
+    % Replaced property listeners with regular calls to update* functions for
+    % performance. Make sure components are added using the 3 add* functions
+    % only to ensure update* are called properly.
     % Unify param types k, s, q, h. One strategy: make all calls to them
     %   analogous; then combine and eliminate redundancy
     % Having models, conditions, objectives be objects would allow them to be
@@ -26,6 +27,9 @@ classdef FitObject < handle
     
    properties
        Name
+       Models
+       Conditions
+       Objectives
        modelNames = {}
        conditionNames = {}
        objectiveNames = {}
@@ -40,21 +44,17 @@ classdef FitObject < handle
        nT
    end
    
-   properties (SetObservable)
-       Models
-       Conditions
-       Objectives
-   end
-   
    methods
        function this = FitObject(name, opts)
            % Constructor; Instantiate FitObject.
            % Inputs:
+           %    name [ string {'DefaultFit'} ]
+           %        Name of fitting scheme
            %    opts [ struct ]
            %        Options struct allowing the following fields:
            %        .Verbose [ intger scalar {tbd} ]
            %            Larger integers show more debugging output.
-           %        .ModelsShareParams [ boolean scalar {false} ]
+           %        .ModelsShareParams [ logical scalar {false} ]
            %            Whether different models (classes of models) share the
            %            same specs for shared/unique params. If true, all param
            %            specs for each of k, s, q, h must be unique among all
@@ -64,6 +64,48 @@ classdef FitObject < handle
            %            unambiguous, and each k, s, q, h for each model class
            %            has a self contained param spec.
            %            TODO: implement this
+           %        .Normalized [ logical scalar {true} ]
+           %           Indicates if the optimization should be done in log parameters
+           %           space
+           %    	.UseAdjoint [ logical scalar {false} ]
+           %           Indicates whether the gradient should be calculated via the
+           %           adjoint method or the forward method
+           %     	.TolOptim [ positive scalar {1e-5} ]
+           %           The objective tolerance. The optimization stops when it is
+           %           predicted that the objective function cannot be improved more
+           %           than this in the next iteration.
+           %     	.Restart [ nonnegative integer scalar {0} ]
+           %           A scalar integer determining how many times the optimzation
+           %           should restart once optimization has stopped.
+           %     	.RestartJump [ handle @(iter,G) returns nonnegative vector nT or
+           %                      scalar | nonnegative vector nT or scalar {0.001} ]
+           %           This function handle controls the schedule for the noise that
+           %           will be added to the parameters before each restart. The
+           %           parameters for the next iteration will be normally distributed
+           %           in log space with a mean equal to the previous iteration and a
+           %           standard deviation equal to the value returned by this
+           %           function. The value returned should usually be a scalar, but it
+           %           can also be a vector with length equal to the number of active
+           %           parameters. It can also be numeric, and the noise will be
+           %           treated as this constant value.
+           %      	.TerminalObj [ real scalar {-inf} ]
+           %           Optimization is halted when this objective function value is
+           %           reached
+           %       .MaxStepSize [ nonegative scalar {1} ]
+           %           Scalar fraction indicator of the maximum relative step size
+           %           that any parameter can take in a single interation
+           %     	.Algorithm [ string {active-set} ]
+           %           Option for fmincon. Which optimization algorithm to use
+           %     	.MaxIter [ postive scalar integer {1000} ]
+           %           Option for fmincon. Maximum number of iterations allowed before
+           %           optimization will be terminated.
+           %     	.MaxFunEvals [ postive scalar integer {5000} ]
+           %           Option for fmincon. Maximum number of objective function
+           %           evaluations allowed before optimization will be terminated.
+           %       .GlobalOptimization [ logical scalar {false} ]
+           %           Use global optimization in addition to fmincon
+           %       .GlobalOpts [ options struct scalar {} ]
+           %           TODO: API in progress
            
            % Clean up inputs
            if nargin < 2
@@ -75,7 +117,7 @@ classdef FitObject < handle
            
            % Fill in defaults
            if isempty(name)
-               name = 'DefaultFitObject';
+               name = 'DefaultFit';
            end
            
            % Default options
@@ -110,27 +152,40 @@ classdef FitObject < handle
            opts = mergestruct(opts_, opts);
            opts.GlobalOpts = mergestruct(optsGlobal_, opts.GlobalOpts);
            
-           % Input validation and checking
-           % TODO
-           
-           % Attach listeners
-           this.addlistener('Models', 'PostSet', @(src,event)this.updateModels(src,event));
-           this.addlistener('Conditions', 'PostSet', @(src,event)this.updateConditions(src,event));
-           this.addlistener('Objectives', 'PostSet', @(src,event)this.updateObjectives(src,event));
+           % TODO: validate options
            
            % Assign fields
            this.Name = name;
            this.options = opts;
-           
        end
        
        function addOptions(this, opts)
            % Add options to fit object
+           % Inputs:
+           %    opts [ struct ]
+           %        Options struct allowing the fields specified in FitObject's constructor
+           % Side Effects:
+           %    Merges in supplied options, overriding existing values/defaults
+           %    and discarding invalid options.
+           %
            % TODO: validate inputs
            this.options = mergestruct(this.options, opts);
        end
        
+       %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+       % Main functions for adding fit object components
+       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
        function addModel(this, model, opts)
+           % Add model to fit object.
+           % Inputs:
+           %    model [ model struct ]
+           %    opts [ struct ]
+           %        Options struct allowing the following fields:
+           %        .BaseModel [ string ]
+           %            Name of model already existing 
+           % Side Effects:
+           %    Adds model to fit object; updates components map
+           
            if nargin < 3
                opts = [];
            end
@@ -144,11 +199,92 @@ classdef FitObject < handle
            
            % Add model to fit object
            this.Models = [this.Models; model];
+           
+           % Update model components
+           this.updateModels;
        end
        
        function addCondition(this, condition, opts)
-           % Add experimental condition to fit object.
-           % Automatically associates with model with corresponding name (Note: when turned into objects, enforce this with typing)
+           % Add experimental condition to fit object. Model condition is based
+           % on must already be present, or it throws an error.
+           % Inputs:
+           %    condition [ condition struct ]
+           %    opts [ struct ]
+           %        Options struct allowing the following fields:
+           %        .UseParams [ nk x 1 double vector {ones(nk,1)} ]
+           %            Specifies rate parameters to be fit, with nonzero
+           %            entries indicating fit, with unique/shared between
+           %            conditions denoted by different/same values in each row.
+           %            Default is all rate params fit, shared between
+           %            conditions.
+           %        .UseSeeds [ ns x 1 double vector {ones{ns,1}} ]
+           %            Specifies seed parameters to be fit, with nonzero
+           %            entries indicating fit, with unique/shared between
+           %            conditions denoted by different/same values in each row.
+           %            Default is all seed params fit, shared between
+           %            conditions.
+           %        .UseInputControls [ nq x 1 double vector {zeros(nq,1)} ]
+           %            Specifies input control parameters to be fit, with nonzero
+           %            entries indicating fit, with unique/shared between
+           %            conditions denoted by different/same values in each row.
+           %            Default is no input control params fit.
+           %        .UseDoseControls [ nh x 1 double vector {zeros(nh,1)} ]
+           %            Specifies dose control parameters to be fit, with nonzero
+           %            entries indicating fit, with unique/shared between
+           %            conditions denoted by different/same values in each row.
+           %            Default is no dose control params fit.
+           %        .StartingParams [ nk x 1 double vector {m.k from parent model} ]
+           %            Starting rate parameter values for the fit. Overrides
+           %            values in the parent model.
+           %        .StartingSeeds [ ns x 1 double vector {condition.s} ]
+           %            Starting seed parameter values for the fit. Overrides
+           %            values in the supplied condition.
+           %        .StartingInputControls [ nq x 1 double vector {condition.q} ]
+           %            Starting input control parameter values for the fit. Overrides
+           %            values in the supplied condition.
+           %        .StartingDoseControls [ nh x 1 double vector {condition.h} ]
+           %            Starting dose control parameter values for the fit. Overrides
+           %            values in the supplied condition.
+           %        .ParamLowerBound [ nk x 1 double vector {zeros(nk,1)} ]
+           %            Minimum values rate parameters can take in constrained
+           %            fit.
+           %        .ParamUpperBound [ nk x 1 double vector {inf(nk,1)} ]
+           %            Maximum values rate parameters can take in constrained
+           %            fit.
+           %        .SeedLowerBound [ ns x 1 double vector {zeros(ns,1)} ]
+           %        .SeedUpperBound [ ns x 1 double vector {inf(ns,1)} ]
+           %        .InputControlLowerBound [ nq x 1 double vector {zeros(nq,1)} ]
+           %        .InputControlUpperBound [ nq x 1 double vector {inf(nq,1)} ]
+           %        .DoseControlLowerBound [ nh x 1 double vector {zeros(nh,1)} ]
+           %        .DoseControlUpperBound [ nh x 1 double vector {inf(nh,1)} ]
+           %        .RelTol [ positive scalar double {1e-6} ]
+           %            Relative tolerance of the integration
+           %        .AbsTol [ positive scalar double {1e-9} ]
+           %            Absolute tolerance of the integration.
+           %            TODO: allow specification of AbsTol for all components
+           %            of integration separately, with spec for different
+           %            terms in regular integration, forward, and adjoint
+           %            sensitivity calculations.
+           % Side Effects:
+           %    Adds condition to fit object; updates component map. Annotates
+           %    condition struct with:
+           %        .ParentModelIdx [ scalar double ]
+           %            Index of model this condition refers to in fit object
+           %        .ParamsSpec [1 x 4 cell vector of nx x 1 double vectors ]
+           %            Specifies fit parameters, with unique/shared spec.
+           %            Simply a copy of Use* for k, s, q, and h in order in a
+           %            cell array.
+           %        .Bounds [ 2 x 4 cell vector of nx x 1 double vectors { bounds [0,Inf] for all } ]
+           %            Lower (top 1 x 4 cell array) and upper (bottom 1 x 4 cell array)
+           %            allowed values for parameters k, s, q, and h. Bounds for
+           %            params not fit are ignored.
+           %        .RelTol [ positive scalar double {1e-6} ]
+           %            Copied from input
+           %        .AbsTol [ positive scalar double {1e-9} ]
+           %            Copied from input
+           %        
+           % Note: Automatically associates with model with corresponding
+           %    name (when turned into objects, enforce this more strictly)
            
            if nargin < 3
                opts = [];
@@ -227,24 +363,24 @@ classdef FitObject < handle
                fixParamsSpec(opts.UseDoseControls, nh)};
            
            % Override starting params that are fit with user specified values
-           % TODO: validate that starting condition falls between bounds; throw
-           % warning if it's changed to be within the bounds
+           % If Starting* aren't supplied, default values from underlying model
+           % or supplied condition are used.
            kUse = logical(opts.UseParams);
            sUse = logical(opts.UseSeeds);
            qUse = logical(opts.UseInputControls);
            hUse = logical(opts.UseDoseControls);
            
            if ~isempty(opts.StartingParams) && any(kUse)
-               kStart(kUse) = opts.StartingParams(kUse);
+               kStart(kUse) = validateBounds(opts.StartingParams(kUse), bounds{1,1}(kUse), bounds{2,1}(kUse));
            end
            if ~isempty(opts.StartingSeeds) && any(sUse)
-               sStart(sUse) = opts.StartingSeeds(sUse);
+               sStart(sUse) = validateBounds(opts.StartingSeeds(sUse), bounds{1,2}(sUse), bounds{2,2}(sUse));
            end
            if ~isempty(opts.UseInputControls) && any(qUse)
-               qStart(qUse) = opts.UseInputControls(qUse);
+               qStart(qUse) = validateBounds(opts.UseInputControls(qUse), bounds{1,3}(qUse), bounds{2,3}(qUse));
            end
            if ~isempty(opts.StartingDoseControls) && any(hUse)
-               hStart(hUse) = opts.StartingDoseControls(hUse);
+               hStart(hUse) = validateBounds(opts.StartingDoseControls(hUse), bounds{1,4}(hUse), bounds{2,4}(hUse));
            end
            
            if ~isempty(opts.StartingParams) && any(kUse)
@@ -263,6 +399,9 @@ classdef FitObject < handle
            % Add condition to fit object
            this.Conditions = [this.Conditions; condition];
            
+           % Update conditions maps
+           this.updateConditions;
+           
        end
        
        function addObjective(this, objective, parentConditions, opts)
@@ -271,11 +410,14 @@ classdef FitObject < handle
            %    objective [ objective struct ]
            %    parentConditions [ string | cell array of strings {1st condition} ]
            %        names of conditions to associate with
-           %    opts [ struct ]
+           %    opts [ struct {[]} ]
            %        .Weight [ double {1} ]
            %            Relative weight of this objective function when multiple
            %            are summed together in fit object. Simply acts as a
            %            multiplier (i.e., no normalization is needed or added)
+           % Side Effects:
+           %    Adds objective to fit object; updates component maps to be
+           %    consistent
            
            if nargin < 4
                opts = [];
@@ -339,31 +481,35 @@ classdef FitObject < handle
                end
            end
            
+           % Update objective components
+           this.updateObjectives;
+           
        end
        
+       %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+       % Convenience objective/condition adder for mixed effects participant
+       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
        function addFitConditionData(this, objective, condition, opts)
            % Higher level/convenience function that adds a "participant" to fit. Abstracts
            % away some of the built in structure that kroneckerbio uses.
            % Inputs:
-           %    objective: dataset/objective function of participant
-           %    condition: experimental condition, with seeds, inputs, and doses
-           % 	opts: options, including indexes or names of each parameter
-           %        types' shared/individual grouping
-           %        .UseParams [ double vector nk ]
-           %            Different numbers indicate independent params. 0
-           %            indicates not fit. 
+           %    objective [ objective struct ]
+           %        Dataset/objective function of participant
+           %    condition [ condition struct {1st condition} ]
+           %        Experimental condition, with seeds, inputs, and doses. 
+           %        Selects 1st condition (and it's corresponding model) if not
+           %        specified.
+           % 	opts [ struct {[]} ]
+           %        Options struct allowing the fields specified in
+           %        addCondition. Of special note:
+           %        .UseParams [ nk x 1 double vector ]
+           %            Specifying rate parameters to vary from other conditions
+           %            that use the same model type generates a dummy model
+           %            with the varying rates.
            % Side Effects:
            %    Adds a dummy model if params are allowed to vary between
            %    conditions.
-           %
-           % Selects 1st condition (and it's corresponding model) if not
-           % specified.
-           % Only UseParams (if fitting params) needs to be specified in order
-           % to see if a dummy model needs to be added.
-           % TODO: consider changing this to allow param specs to apply
-           % globally. This change may make implementation easier, at the
-           % expense of making some simple cases harder for the user. This
-           % change would also obviate the need to linear equality constraints.
+           
            if nargin < 4
                opts = [];
                if nargin < 3
@@ -447,6 +593,12 @@ classdef FitObject < handle
        
        function model = getModel(this, name)
            % Return model by name.
+           % Inputs:
+           %    name [ string ]
+           %        Name of model to return
+           % Outputs:
+           %    model [ model struct ]
+           %        Model struct with input name
            modelIdx = ismember(this.modelNames, name);
            if ~any(modelIdx)
                error('FitObject:getModel: Model %s not found', name)
@@ -456,6 +608,12 @@ classdef FitObject < handle
        
        function condition = getCondition(this, name)
            % Return condition by name.
+           % Inputs:
+           %    name [ string ]
+           %        Name of condition to return
+           % Outputs:
+           %    model [ condition struct ]
+           %        Condition struct with input name
            conditionIdx = ismember(this.conditionNames, name);
            if ~any(conditionIdx)
                error('FitObject:getCondition: Condition %s not found', name)
@@ -463,14 +621,16 @@ classdef FitObject < handle
            condition = this.Conditions(conditionIdx);
        end
        
-       
        %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
        % Called inside optimizer's loop
        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
        function [G, D] = computeObjective(this)
-           
-           % Bridge fit object with computeObj and computeObjGrad forms
-           %    Make vector of objectives for each condition
+           % Outputs:
+           %    G [ double scalar ]
+           %        Objective function value from sum of all objectives in fit
+           %        object with current parameters
+           %    D [ nT x 1 double vector ]
+           %        Gradient w.r.t. all parameters in Theta for fmincon
            
            if nargout == 1
                
@@ -484,10 +644,11 @@ classdef FitObject < handle
                end
                
            end
+           
            if nargout == 2
                
                G = 0;
-               D = zeros(this.nT,1);
+               D = zeros(this.nT, 1);
                
                for i = 1:this.nConditions
                    modelIdx = this.Conditions(i).ParentModelIdx;
@@ -499,9 +660,26 @@ classdef FitObject < handle
                    D = mapTlocal2T(Di, this.paramsMap(i,:), this.nT, D, 'add');
                end
                
-               % Normalize gradient
-               if this.options.Normalized
-                   D = D .* this.collectParams;
+           end
+           
+           if nargout == 3
+               
+               % TODO: convert computeObjHess and mapHlocal2H
+               error('computeObjHess not implemented yet')
+               
+               G = 0;
+               D = zeros(this.nT, 1);
+               H = zeros(this.nT, this.nT);
+               
+               for i = 1:this.nConditions
+                   modelIdx = this.Conditions(i).ParentModelIdx;
+                   objectives = this.Objectives(this.componentMap(:,2) == i)';
+                   
+                   [Gi, Di, Hi] = computeObjHess(this.Models(modelIdx), this.Conditions(i), objectives, this.options);
+                   
+                   G = G + Gi;
+                   D = mapTlocal2T(Di, this.paramsMap(i,:), this.nT, D, 'add');
+                   H = mapHlocal2H(Hi, this.paramsMap(i,:), this.nT, H, 'add');
                end
                
            end
@@ -509,6 +687,10 @@ classdef FitObject < handle
        
        function T = collectParams(this)
            % Collect all params from fit object into master T
+           % Outputs:
+           %    T [ nT x 1 double vector ]
+           %        Vector of main parameters optimized by fmincon.
+           
            T = zeros(this.nT, 1);
            
            % Go thru all conditions
@@ -524,6 +706,13 @@ classdef FitObject < handle
        
        function updateParams(this, T)
            % Update all params in fit object with master T
+           % Inputs:
+           %    T [ nT x 1 double vector ]
+           %        Vector of main parameters optimized by fmincon. Must be
+           %        supplied in absolute units (e.g, if options.Normalized, 
+           %        exponentiate in calling function).
+           % Side Effects:
+           %    Updates all models and conditions with T provided
            
            % Go thru all conditions
            for i = 1:this.nConditions
@@ -547,6 +736,11 @@ classdef FitObject < handle
        function [LowerBound, UpperBound] = collectBounds(this)
            % Collect all bounds from fit object into master list
            % Used by normalize and for fmincon options
+           % Outputs:
+           %    LowerBound [ nT x 1 double vector ]
+           %        Vector of lower bounds for params optimized by fmincon
+           %    UpperBound [ nT x 1 double vector ]
+           %        Vector of upper bounds for params optimized by fmincon
            LowerBound = zeros(this.nT, 1);
            UpperBound = zeros(this.nT, 1);
            
@@ -558,9 +752,10 @@ classdef FitObject < handle
        end
        
        %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-       % Event listeners
+       % Update fit object components to ensure consistency
        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-       function updateModels(this, ~, ~)
+       function updateModels(this)
+           % Update fit object fields when model is added
            nModels_ = length(this.Models);
            this.nModels = nModels_;
            
@@ -571,7 +766,8 @@ classdef FitObject < handle
            this.modelNames = modelNames_;
        end
        
-       function updateConditions(this, ~, ~)
+       function updateConditions(this)
+           % Update fit object fields when condition is added
            nConditions_ = length(this.Conditions);
            this.nConditions = nConditions_;
            
@@ -582,8 +778,9 @@ classdef FitObject < handle
            this.conditionNames = conditionNames_;
        end
        
-       function updateObjectives(this, ~, ~)
+       function updateObjectives(this)
            % Update objectives and all mapping fields for traversing components
+           % Called after an objective is added
            nObjectives_ = length(this.Objectives);
            this.nObjectives = nObjectives_;
            
@@ -638,6 +835,8 @@ classdef FitObject < handle
        end
        
        function updateParamsShared(this)
+           % Update collection of individual condition fitting specs in fit
+           % object. paramsShared is used to more readily calculate paramsSpec
            paramsShared_ = cell(this.nConditions, 4);
            for i = 1:this.nConditions
                paramsShared_(i,:) = this.Conditions(i).ParamsSpec;
@@ -651,22 +850,69 @@ classdef FitObject < handle
        
    end
    
+   
+   %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+   % Static factory functions for convenience/basic backwards compatibility
+   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
    methods (Static)
        function fit = buildFitObject(models, conditions, objectives, opts)
            % Factory function to convert legacy format to fit object
            % Inputs:
            %    models [ struct vector nModels ]
-           %        Models to fit. Note: ignores all models except 1st one
+           %        Model to fit. Note: ignores all models except 1st one
            %        (since multi-model fitting wasn't previously implemented).
            %    conditions [ struct vector nConditions ]
            %    objectives [ struct matrix nConditions x nObjectives ]
            %    opts [ struct ]
+           %        .UseParams [ nk x 1 logical vector | nkfit x 1 integer vector {true(nk,1)} ]
+           %        .UseSeeds [ ns x nCon logical matrix | ns x 1 logical vector | nsfit x 1 positive integer vector {[]} ]
+           %        .UseInputControls [ cell vector nCon of logical vectors or positive integer vectors | logical vector nq | positive integer vector {[]} ]
+           %        .UseDoseControls [ cell vector nCon of logical vectors or positive integer vectors | logical vector nh | positive integer vector {[]} ]
+           %        .AbsTol [ nCon cell vector of AbsTol structs | nCon cell vector of double vectors {1e-9 for everything} ]
+           %
+           % TODO: implement more backwards compatibility code
            
            if nargin < 4
                opts = [];
            end
            
-           fit = FitObject('Converted_Fit');
+           if ~isscalar(models)
+               warning('FitObject:buildFitObject: The model structure must be scalar; ignoring all models except 1st one')
+           end
+           
+           nx = models(1).nx;
+           nk = models(1).nk;
+           ns = conditions(1).ns;
+           nq = conditions(1).nq;
+           nh = conditions(1).nh;
+           nCon = length(conditions);
+           
+           % Default options in old format
+           opts_ = [];
+           opts_.UseParams = true(nk,1);
+           opts_.UseSeeds = false(ns,1);
+           opts_.UseInputControls = false(nq,1);
+           opts_.UseDoseControls = false(nh,1);
+           opts_.UseAdjoint = false;
+           opts_.Verbose = 1;
+           opts_.AbsTol = 1e-9;
+           opts_.continuous = false;
+           opts = mergestruct(opts_, opts);
+           
+           % Convert old format options to new format ones
+           useParams = (1:nk)'.*fixUseParams(opts.UseParams, nk);
+           useSeeds = repmat((1:ns), nCon, 1)'.*fixUseSeeds(opts.UseSeeds, ns, nCon);
+           useInputControls = fixUseControls(opts.UseInputControls, nCon, cat(1,conditions.nq));
+           useDoseControls = fixUseControls(opts.UseDoseControls, nCon, cat(1,conditions.nh));
+           
+           % Standardize AbsTol
+           absTol = fixAbsTol(opts.AbsTol, 2, opts.continuous, nx, nCon, opts.UseAdjoint, useParams, useSeeds, useInputControls, useDoseControls);
+           
+           % Make new fit object
+           fit = FitObject('ConvertedFit');
+           
+           % Add rest of options (invalid options ignored when added to fit object)
+           fit.addOptions(opts);
            
            % Add models
            nModels_ = length(models);
@@ -678,16 +924,21 @@ classdef FitObject < handle
            % Add conditions
            % Assume all conditions belong to 1st model 
            %    (which is necessary because they must all refer to it when being built)
-           nConditions_ = length(conditions);
-           for i = 1:nConditions_
-               fit.addCondition(conditions(i))
+           for i = 1:nCon
+               conditionOpts = [];
+               conditionOpts.UseParams = useParams;
+               conditionOpts.UseSeeds = useSeeds(:,i);
+               conditionOpts.UseInputControls = useInputControls{i};
+               conditionOpts.UseDoseControls = useDoseControls{i};
+               conditionOpts.AbsTol = absTol{i};
+               fit.addCondition(conditions(i), conditionOpts);
            end
            
            % Add objectives
            % Each row of objective functions belongs to the corresponding
            % condition
            nObjectives_ = size(objectives,2);
-           for i = 1:nConditions_
+           for i = 1:nCon
                conditionName = conditions(i).Name;
                for j = 1:nObjectives_
                    obj = objectives(i,j);
@@ -697,8 +948,7 @@ classdef FitObject < handle
                end
            end
            
-           % Add options
-           fit.addOptions(opts);
+
        end
    end
    
@@ -836,6 +1086,47 @@ switch nBounds
 end
 end
 
+function out = validateBounds(in, lb, ub)
+% Check bounds on parameters: returning it if it satisfies them, setting equal to
+% appropriate bound if it falls outside and throwing warning. Accepts vectors of
+% in, lb, and ub. Throws error if input vectors' lengths don't match.
+% Inputs:
+%   in [ nx x 1 double vector ]
+%       Vector of parameters
+%   lb [ nx x 1 double vector ]
+%       Vector of lower bounds
+%   ub [ nx x 1 double vector ]
+%       Vector of upper bounds
+% Outputs:
+%   out [ nx x 1 double vector ]
+%       Vector of validated/floored+ceilinged parameters
+
+% Make sure all inputs have the same dimension
+in = vec(in);
+lb = vec(lb);
+ub = vec(ub);
+nin = length(in);
+nlb = length(lb);
+nub = length(ub);
+assert(nin == nlb, 'FitObject:validateBounds: input param vector length %d and lower bounds length %d don''t match', nin, nlb);
+assert(nin == nub, 'FitObject:validateBounds: input param vector length %d and upper bounds length %d don''t match', nin, nub);
+
+lMask = in < lb;
+if any(lMask)
+    warning('FitObject:validateBounds: input param below lower bound - setting to lower bound')
+end
+in(lMask) = lb(lMask);
+
+uMask = in > ub;
+if any(uMask)
+    warning('FitObject:validateBounds: input param above upper bound - setting to upper bound')
+end
+in(uMask) = ub(uMask);
+
+out = in;
+
+end
+
 function fixedParamsSpec = fixParamsSpec(ParamsSpec, n)
 nParams = length(ParamsSpec);
 switch nParams
@@ -947,3 +1238,4 @@ for i = 1:n
 end
 
 end
+

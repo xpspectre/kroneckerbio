@@ -7,51 +7,42 @@ function [UseSeeds, nTs] = fixUseSeeds(UseSeeds, ns, nCon)
 %   [UseSeeds, nTs] = fixUseSeeds(UseSeeds, UseModelSeeds, ns, nCon)
 %
 %   Inputs
-%   UseSeeds: [ logical matrix ns by nCon | logical vector ns | positive integer vector ]
-%       Indicates the seed parameters that will be allowed to vary
-%       during the optimization.
-%       1) logical matrix ns by nCon to indicate active seed parameters for each
-%           condition
-%       2) logical index vector ns to indicate all conditions have the same
-%           active seed parameters
-%       3) positive integer vector into ns, all conditions have the same active
-%           seed parameters (TODO: either deprecate or make integer matrix analog)
+%   UseSeeds: [ logical matrix ns by nCon | positive integer vector ]
+%       1) linear index vector into ns, assumed same for all conditions
+%       2) logical index vector ns to indicate that all conditions have the
+%           same active parameters
+%       3) matrix of logical indexes size ns by nCon
 %   ns: [ nonegative integer scalar ]
 %       The number of seed parameters in the model
-%   nCon: [ nonnegative integer {1} ]
+%   nCon: [ nonnegative integer ]
 %       Number of experimental conditions
 %
 %   Outputs
 %   UseSeeds: [ logical matrix ns by nCon ]
-%       Standard form of UseSeeds
+%       If UseModelSeeds = true, then UseSeeds will be a logical column
+%       vector. Otherwise, it will be a logical matrix.
 %   nTs: [ nonnegative integer ]
 %       Number of active seed parameters
 
 % (c) 2015 David R Hagen & Bruce Tidor
 % This work is released under the MIT license.
 
-if nargin < 3
-    nCon = 1;
-end
-
-if isnumeric(UseSeeds)
-    if isscalar(UseSeeds) && isnan(UseSeeds) % Default
-        UseSeeds = true(ns,nCon);
-    else % integer vector
-        UseSeeds = vec(UseSeeds);
-        assert(all(UseSeeds <= ns), 'KroneckerBio:UseSeeds:LinearIndexOutOfRange', 'UseSeeds, when a linear index, can have no value larger than ns. Use a logical matrix to refer to different parameters on each condition.')
-        temp = false(ns,nCon);
-        temp(UseSeeds,:) = true;
-        UseSeeds = temp;
-    end
+if isnumeric(UseSeeds) && isscalar(UseSeeds) && isnan(UseSeeds)
+    % Default
+    UseSeeds = true(ns,1);
+elseif isnumeric(UseSeeds) && all(floor(vec(UseSeeds)) == vec(UseSeeds)) && all(UseSeeds >= 1)
+    % Linear index
+    UseSeeds = vec(UseSeeds);
+    assert(all(UseSeeds <= ns), 'KroneckerBio:UseSeeds:LinearIndexOutOfRange', 'UseSeeds, when a linear index, can have no value larger than m.ns. Use a logical matrix to refer to different seeds on each condition.')
+    temp = false(ns,nCon);
+    temp(UseSeeds,:) = true;
+    UseSeeds = temp;
 elseif islogical(UseSeeds)
-    if length(UseSeeds) == length(vec(UseSeeds)) % logical vector
-        assert(length(UseSeeds) == ns, 'KroneckerBio:UseSeeds:InvalidLogicalVectorSize', 'UseSeeds, when a logical vector, must have a number of elements equal to ns')
-        UseSeeds = repmat(vec(UseSeeds), 1, nCon);
-    else % logical matrix
-        assert(numel(UseSeeds) == ns*nCon, 'KroneckerBio:UseSeeds:InvalidLogicalMatrixSize', 'UseSeeds, when a logical matrix, must have a number of elements equal to ns*nCon')
-    end
+    % Logical index
+    assert(numel(UseSeeds) == ns*nCon, 'KroneckerBio:UseSeeds:InvalidLogicalSize', 'UseSeeds, when a logical index, must have a number of elements equal to ns*nCon')
+    UseSeeds = reshape(UseSeeds, ns,nCon);
 else
     error('KroneckerBio:UseSeeds:InvalidType', 'UseSeeds must be provided as logical or linear index into con.s')
 end
+
 nTs = nnz(UseSeeds);

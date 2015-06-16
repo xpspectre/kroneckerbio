@@ -100,7 +100,7 @@ if opts.Verbose; fprintf('Summary: |dGdT| = %g\n', norm(D)); end
 % Convert gradient to standard form for local T
 D = mapT2Tlocal(D, Tmap);
 
-%% Helper function
+%% Helper functions
 function Tlocal = mapT2Tlocal(T, Tmap)
 % Map combined T vector of fit params for 1 condition to standard form.
 % Input:

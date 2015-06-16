@@ -1,10 +1,9 @@
 % Test/tutorial script for multiple participants/experiments with datasets/objective functions
-
 clear; close all; clc
 rng('default')
 
 %% Initialize fit object
-fit = FitObject('T09_Mixed_Effects_Fit');
+fit = FitObject('T05b_Mixed_Effects_Fit');
 
 %% Construct equilibrium experiment A + B <-> C with seeds
 m = InitializeModel('Base');
@@ -30,12 +29,7 @@ m = AddReaction(m, '', '', 'A', 'B', 'C', '', 'kf', 'kr');
 
 m = FinalizeModel(m);
 
-ns = m.ns;
-nk = m.nk;
-
-opts = [];
-
-fit.addModel(m, opts)
+fit.addModel(m)
 
 %% Set up experimental conditions and generate some test data for multi-"participant" fitting
 tF = 1;
@@ -59,9 +53,11 @@ for i = 1:nCon
     obj = obs.Objective(measurementsList);
     
     opts = [];
-    opts.Verbose = 2;
     opts.UseParams = [i;1]; % different kf, same kr
     opts.UseSeeds = [i;i;i]; % all different seeds
+    opts.ParamLowerBound = [1e-2 1e-2];
+    opts.ParamUpperBound = [1e2  1e2];
+    opts.StartingParams = [4 4];
     
     fit.addFitConditionData(obj, con, opts);
     
@@ -80,6 +76,7 @@ opts = [];
 opts.Verbose = 2;
 opts.TolOptim = 1;
 opts.MaxStepSize = 1;
+opts.Normalized = false;
 opts.UseAdjoint = false; % adjoint fails with current setup
 fitOut = FitObjective(fit, opts);
 
@@ -110,10 +107,3 @@ xlabel('Time')
 ylabel('Amount')
 title('Varying seeds, varying kf')
 
-%% Construct model variants
-
-
-%% Construct different subpopulation structure
-
-%% Linearized parameter uncertainty
-% F = ObjectiveInformation(mFit, con, obj);

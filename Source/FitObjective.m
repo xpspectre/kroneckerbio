@@ -4,6 +4,9 @@ function varargout = FitObjective(varargin)
 %
 %   Mathematically: T = argmin(G(T))
 %
+%   [fit, G, D] = FitObjective(fit)
+%   [fit, G, D] = FitObjective(fit, opts)
+%   [m, con, G, D] = FitObjective(m, con, obj)
 %   [m, con, G, D] = FitObjective(m, con, obj, opts)
 %
 %   FitObjective uses the derivatives in the Kronecker model and in the
@@ -15,118 +18,55 @@ function varargout = FitObjective(varargin)
 %   parameters attempting to find the parameter set that will minimize the
 %   objective function while keeping with the bounds.
 %
-%   Inputs
-%   (old method)
-%   m: [ model struct scalar ]
-%       The KroneckerBio model that will be simulated
-%   con: [ experiment struct vector ]
-%       The experimental conditions under which the model will be simulated
-%   obj: [ objective struct matrix ]
-%       The objective structures defining the objective functions to be
-%       evaluated.
-%   (new method)
-%   fit: [ FitObject ]
-%   (common)
-%   opts: [ options struct scalar {} ]
-%       .UseInputControls [ cell vector nCon of logical vectors or positive 
-%                           integer vectors | logical vector nq | positive 
-%                           integer vector {[]} ]
-%           Indicates the input control parameters that will be allowed to
-%           vary during the optimization
-%       .UseDoseControls [ cell vector nCon of logical vectors or positive 
-%                           integer vectors | logical vector nq | positive 
-%                           integer vector {[]} ]
-%           Indicates the input control parameters that will be allowed to
-%           vary during the optimization
-%       .LowerBound [ nonegative vector {0} ]
-%           The lower bound on the fitted parameters. It can be length
-%           nk+nCon*nx, nk+nx, nT, just nk if nTx = 0, or a scalar. The
-%           bounds will be interpreted in that order if the length matches
-%           multiple orders.
-%       .UpperBound [ nonegative vector {0} ]
-%           The upper bound for the fitted parameters. It must be the same
-%           length as LowerBound.
-%     	.ObjWeights [ real matrix nObj by nCon {ones(nObj,nCon)} ]
-%           Applies a post evaluation weight on each objective function
-%           in terms of how much it will contribute to the final objective
-%           function value.
-%       .Normalized [ logical scalar {true} ]
-%           Indicates if the optimization should be done in log parameters
-%           space
-%    	.UseAdjoint [ logical scalar {false} ]
-%           Indicates whether the gradient should be calculated via the
-%           adjoint method or the forward method
-%     	.TolOptim [ positive scalar {1e-5} ]
-%           The objective tolerance. The optimization stops when it is
-%           predicted that the objective function cannot be improved more
-%           than this in the next iteration.
-%     	.Restart [ nonnegative integer scalar {0} ]
-%           A scalar integer determining how many times the optimzation
-%           should restart once optimization has stopped.
-%     	.RestartJump [ handle @(iter,G) returns nonnegative vector nT or
-%                      scalar | nonnegative vector nT or scalar {0.001} ]
-%           This function handle controls the schedule for the noise that
-%           will be added to the parameters before each restart. The
-%           parameters for the next iteration will be normally distributed
-%           in log space with a mean equal to the previous iteration and a
-%           standard deviation equal to the value returned by this
-%           function. The value returned should usually be a scalar, but it
-%           can also be a vector with length equal to the number of active
-%           parameters. It can also be numeric, and the noise will be
-%           treated as this constant value.
-%      	.TerminalObj [ real scalar {-inf} ]
-%           Optimization is halted when this objective function value is
-%           reached
-%       .MaxStepSize [ nonegative scalar {1} ]
-%           Scalar fraction indicator of the maximum relative step size
-%           that any parameter can take in a single interation
-%     	.Algorithm [ string {active-set} ]
-%           Option for fmincon. Which optimization algorithm to use
-%     	.MaxIter [ postive scalar integer {1000} ]
-%           Option for fmincon. Maximum number of iterations allowed before
-%           optimization will be terminated.
-%     	.MaxFunEvals [ postive scalar integer {5000} ]
-%           Option for fmincon. Maximum number of objective function
-%           evaluations allowed before optimization will be terminated.
-%       .RelTol [ nonnegative scalar {1e-6} ]
-%           Relative tolerance of the integration
-%       .AbsTol [ cell vector of nonnegative vectors | nonnegative vector |
-%                 nonegative scalar {1e-9} ]
-%           Absolute tolerance of the integration. If a cell vector is
-%           provided, a different AbsTol will be used for each experiment.
-%       .Verbose [ nonnegative integer scalar {1} ]
-%           Bigger number displays more progress information
-%       .GlobalOptimization [ logical scalar {false} ]
-%           Use global optimization in addition to fmincon
-%       .GlobalOpts [ options struct scalar {} ]
-%           TODO: API in progress
+%   Inputs:
+%       fit: [ FitObject ]
+%           Fit object that contains fitting scheme
+%       m: [ model struct scalar ]
+%           The KroneckerBio model that will be simulated
+%       con: [ experiment struct vector ]
+%           The experimental conditions under which the model will be simulated
+%       obj: [ objective struct matrix ]
+%           The objective structures defining the objective functions to be
+%           evaluated.
+%       opts: [ struct {} ]
+%           Options struct allowing the fields specified in FitObject's constructor
 %
 %   Outputs
+%       fit: [ FitObject ]
+%           Fit object updated with optimized values
 %       m: [ model scalar ]
-%           The model with all the optimum kinetic parameters applied, as
-%           well as the IC parameters if UseModelSeeds = true.
+%           The model with optimal rate parameters applied
 %       con: [ experiment vector ]
-%           The experimental conditions which will have the optimum IC
-%           parameters applied if UseModelSeeds = false.
+%           The experimental conditions with optimal seed, input control, and
+%           dose control parameters applied
 %       G: [ real scalar ]
 %           The optimum objective function value
 %       D: [ real vector nT ]
 %           The objective gradient at the optimum parameter set
+%
+%   Generally compatible with old (single model, vector of conditions, matrix of
+%   objectives) and new (FitObject) forms of specifying fitting scheme. Outputs
+%   results in the same format as input.
+%   TODO: reimplement some functionality with UseParams and related, bounds, and
+%   absolute tolerance that the new method broke.
 
 % (c) 2015 David R Hagen & Bruce Tidor
 % This work is released under the MIT license.
 
 %% Work-up
 % Clean up inputs
-if nargin == 4
-    fit = FitObject.buildFitObject(varargin{1}, varargin{2}, varargin{3}, varargin{4});
-elseif nargin == 3
-    fit = FitObject.buildFitObject(varargin{1}, varargin{2}, varargin{3});
-elseif nargin == 2
-    fit = varargin{1};
-    fit.addOptions(varargin{2});
-elseif nargin == 1
-    fit = varargin{1};
+switch nargin
+    case 1
+        fit = varargin{1};
+    case 2
+        fit = varargin{1};
+        fit.addOptions(varargin{2});
+    case 3
+        fit = FitObject.buildFitObject(varargin{1}, varargin{2}, varargin{3});
+    case 4
+        fit = FitObject.buildFitObject(varargin{1}, varargin{2}, varargin{3}, varargin{4});
+    otherwise
+        
 end
 
 % For convenience, copy fit object's options into this space
@@ -179,7 +119,7 @@ else
 end
 
 %% Global optimization options
-% TODO: make sure options are relevant for solver
+% TODO: make sure options are relevant for solver; extend global solver API
 globalOpts = opts.GlobalOpts;
 
 % Sanity checking
@@ -201,7 +141,7 @@ if opts.Normalized
 end
 
 %% Apply bounds to starting parameters before optimizing
-% fmincon will choose a wierd value if a starting parameter is outside the bounds
+% fmincon will choose a weird value if a starting parameter is outside the bounds
 T0(T0 < LowerBound) = LowerBound(T0 < LowerBound);
 T0(T0 > UpperBound) = UpperBound(T0 > UpperBound);
 
@@ -216,8 +156,6 @@ end
 That = T0;
 Gbest = Inf;
 Tbest = T0;
-
-G = fit.computeObjective;
 
 for iRestart = 1:opts.Restart+1
     % Init abort parameters
@@ -313,14 +251,28 @@ end
 % Update parameter sets
 fit.updateParams(Tbest);
 
-% Output according to input spec
-if nargin == 4
-    varargout{1} = fit.Models;
-    varargout{2} = fit.Conditions;
-    varargout{3} = G;
-    varargout{4} = D;
-elseif nargin == 2
-    varargout{1} = fit;
+% Output according to input signature
+switch nargin
+    case 1
+        varargout{1} = fit;
+        varargout{2} = G;
+        varargout{3} = D;
+    case 2
+        varargout{1} = fit;
+        varargout{2} = G;
+        varargout{3} = D;
+    case 3
+        varargout{1} = fit.Models;
+        varargout{2} = fit.Conditions;
+        varargout{3} = G;
+        varargout{4} = D;
+    case 4
+        varargout{1} = fit.Models;
+        varargout{2} = fit.Conditions;
+        varargout{3} = G;
+        varargout{4} = D;
+    otherwise
+        
 end
 
 % End of function
@@ -330,9 +282,6 @@ end
 %%%%% Objective function for fmincon %%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     function [G, D] = objective(T)
-        % Reset answers
-        G = 0;
-        D = zeros(nT,1);
         
         % Unnormalize
         if opts.Normalized
@@ -351,6 +300,11 @@ end
         end
         if nargout == 2
             [G, D] = fit.computeObjective;
+            
+            % Normalize gradient
+            if opts.Normalized
+                D = D .* fit.collectParams;
+            end
         end
         
     end

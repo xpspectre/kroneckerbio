@@ -67,7 +67,7 @@ classdef FitObject < handle
            %        .Normalized [ logical scalar {true} ]
            %           Indicates if the optimization should be done in log parameters
            %           space
-           %    	.UseAdjoint [ logical scalar {false} ]
+           %    	.UseAdjoint [ logical scalar {true} ]
            %           Indicates whether the gradient should be calculated via the
            %           adjoint method or the forward method
            %     	.TolOptim [ positive scalar {1e-5} ]
@@ -125,7 +125,7 @@ classdef FitObject < handle
            opts_.ModelsShareParams = false;
            
            opts_.Normalized       = true;
-           opts_.UseAdjoint       = false; % set to true when Adjoit calculation is updated
+           opts_.UseAdjoint       = true;
            
            opts_.TolOptim         = 1e-5;
            opts_.Restart          = 0;
@@ -893,8 +893,9 @@ classdef FitObject < handle
            opts_.UseSeeds = false(ns,1);
            opts_.UseInputControls = false(nq,1);
            opts_.UseDoseControls = false(nh,1);
-           opts_.UseAdjoint = false;
+           opts_.UseAdjoint = true;
            opts_.Verbose = 1;
+           opts_.RelTol = 1e-6;
            opts_.AbsTol = 1e-9;
            opts_.continuous = false;
            opts = mergestruct(opts_, opts);

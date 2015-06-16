@@ -1,4 +1,6 @@
 %% Construct equilibrium experiment A + B <-> C
+clear; close all; clc
+
 m = InitializeModel('Equilibrium');
 
 m = AddCompartment(m, 'Solution', 3, 1);
@@ -31,9 +33,7 @@ obs = observationLinearWeightedSumOfSquares(outputList, timesList, sd, 'DefaultO
 obj = obs.Objective(measurements);
 
 %% Fit
-opts = [];
-opts.UseAdjoint = false;
-mFit = FitObjective(m, con, obj, opts);
+mFit = FitObjective(m, con, obj);
 
 % Display fit results
 tF = 1;

@@ -77,7 +77,7 @@ opts.Verbose = 2;
 opts.TolOptim = 1;
 opts.MaxStepSize = 1;
 opts.Normalized = false;
-opts.UseAdjoint = false; % adjoint fails with current setup
+opts.UseAdjoint = false;
 fitOut = FitObjective(fit, opts);
 
 %% Display fit results

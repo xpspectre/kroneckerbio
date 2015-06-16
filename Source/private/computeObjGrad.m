@@ -1,14 +1,4 @@
 function [G, D] = computeObjGrad(m, con, obj, opts)
-% Assumes a single m
-% Switch to Adjoint method if requested
-if opts.UseAdjoint
-    warning('UseAdjoint not implemented/modified for changes in fit objective.')
-    [G, D] = computeObjSensAdj(m, con, obj, opts);
-    return
-end
-
-% Continue with forward method
-verbose_all = max(opts.Verbose-1,0);
 
 % Process options
 % Note: this currently acts as a shim to existing code - a lot of this can be
@@ -23,6 +13,15 @@ opts.RelTol = con.RelTol;
 AbsTol = fixAbsTol(con.AbsTol, 2, opts.continuous, m.nx, 1, opts.UseAdjoint, opts.UseParams, opts.UseSeeds, {opts.UseInputControls}, {opts.UseDoseControls});
 opts.AbsTol = AbsTol{1};
 opts.ObjWeights = [obj(:).Weight];
+
+% Switch to Adjoint method if requested
+if opts.UseAdjoint
+    [G, D] = computeObjSensAdj(m, con, obj, opts);
+    return
+end
+
+% Continue with forward method
+verbose_all = max(opts.Verbose-1,0);
 
 % Constants
 nx = m.nx;
@@ -99,28 +98,3 @@ if opts.Verbose; fprintf('Summary: |dGdT| = %g\n', norm(D)); end
 
 % Convert gradient to standard form for local T
 D = mapT2Tlocal(D, Tmap);
-
-%% Helper functions
-function Tlocal = mapT2Tlocal(T, Tmap)
-% Map combined T vector of fit params for 1 condition to standard form.
-% Input:
-%   T [ nT x 1 double vector ]
-%       Format of combined fit params for this condition
-%   Tmap [ 1 x 4 cell vector of nX x 1 logical vectors ]
-%       Format of which params are used
-% Output:
-%   Tlocal [ 1 x 4 cell vector of nX x 1 double vectors ]
-%       Format of this condition's fit params
-Tlocal = cell(1,4);
-Tidx = 0;
-for i = 1:4
-    Tstart = Tidx + 1;
-    Tend = Tstart + nnz(Tmap{i}) - 1;
-    Tsub = T(Tstart:Tend);
-    
-    Tlocal_i = zeros(length(Tmap{i}),1);
-    Tlocal_i(Tmap{i}) = Tsub;
-    Tlocal{i} = Tlocal_i;
-    
-    Tidx = Tend;
-end

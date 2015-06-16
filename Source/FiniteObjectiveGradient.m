@@ -64,71 +64,29 @@ end
 assert(nargin >= 3, 'KroneckerBio:FiniteObjectiveGradient:TooFewInputs', 'FiniteObjectiveGradient requires at least 3 input arguments.')
 assert(isscalar(m), 'KroneckerBio:FiniteObjectiveGradient:MoreThanOneModel', 'The model structure must be scalar')
 
-% Default options
-defaultOpts.Verbose          = 1;
+% Put into fit object
+fit = FitObject.buildFitObject(m, con, obj, opts);
 
-defaultOpts.RelTol           = [];
-defaultOpts.AbsTol           = [];
-
-defaultOpts.UseParams        = nan;
-defaultOpts.UseSeeds         = nan;
-defaultOpts.UseInputControls = nan;
-defaultOpts.UseDoseControls  = nan;
-
-defaultOpts.ObjWeights       = ones(size(obj));
-
-defaultOpts.Normalized       = true;
-
-opts = mergestruct(defaultOpts, opts);
-
+% For convenience, copy fit object's options into this space
+opts = fit.options;
 verbose = logical(opts.Verbose);
-opts.Verbose = max(opts.Verbose-1,0);
-
-% Constants
-nx = m.nx;
-ns = m.ns;
-nk = m.nk;
-nCon = numel(con);
-
-% Ensure UseParams is logical vector
-[opts.UseParams, nTk] = fixUseParams(opts.UseParams, nk);
-
-% Ensure UseICs is a logical matrix
-[opts.UseSeeds, nTs] = fixUseSeeds(opts.UseSeeds, ns, nCon);
-
-% Ensure UseControls is a cell vector of logical vectors
-[opts.UseInputControls, nTq] = fixUseControls(opts.UseInputControls, nCon, cat(1,con.nq));
-[opts.UseDoseControls, nTh] = fixUseControls(opts.UseDoseControls, nCon, cat(1,con.nh));
-
-nT = nTk + nTs + nTq + nTh;
 
 % Store starting parameter sets
-T0 = collectActiveParameters(m, con, opts.UseParams, opts.UseSeeds, opts.UseInputControls, opts.UseDoseControls);
-
-% Refresh conditions and objectives
-con = refreshCon(m, con);
-
-% Fix integration type
-[opts.continuous, opts.complex, opts.tGet] = fixIntegrationType(con, obj);
-
-% RelTol
-opts.RelTol = fixRelTol(opts.RelTol);
-
-% Fix AbsTol to be a cell array of vectors appropriate to the problem
-opts.AbsTol = fixAbsTol(opts.AbsTol, 1, opts.continuous, nx, nCon);
+T0 = fit.collectParams;
 
 %% Loop through conditions
+nT = length(T0);
 D = zeros(nT,1);
 
 % Initial value
 if verbose; fprintf('Initial round\n'); end
-G = computeObj(m, con, obj, opts);
+G = fit.computeObjective;
 
-for iT = 1:nT
-    if verbose; fprintf('Step %d of %d\n', iT, nT); end
+for i = 1:nT
+    if verbose; fprintf('Step %d of %d\n', i, nT); end
     
     % Set baseline parameters
-    T_i = T0(iT);
+    T_i = T0(i);
     T_up = T0;
     
     % Change current parameter by finite amount
@@ -139,14 +97,14 @@ for iT = 1:nT
     end
     
     % Compute objective values
-    T_up(iT) = T_up(iT) + diff;
-    [m, con] = updateAll(m, con, T_up, opts.UseParams, opts.UseSeeds, opts.UseInputControls, opts.UseDoseControls);
-    G_up = computeObj(m, con, obj, opts);
+    T_up(i) = T_up(i) + diff;
+    fit.updateParams(T_up);
+    G_up = fit.computeObjective;
 
     % Compute D
     if opts.Normalized
-        D(iT) = T_i * (G_up - G) / diff;
+        D(i) = T_i * (G_up - G) / diff;
     else
-        D(iT) = (G_up - G) / diff ;
+        D(i) = (G_up - G) / diff ;
     end
 end

@@ -9,9 +9,6 @@ classdef FitObject < handle
     % Contains all the default options required for fitting (previously in FitObjective)
     
     % TODO/Notes
-    % Replaced property listeners with regular calls to update* functions for
-    % performance. Make sure components are added using the 3 add* functions
-    % only to ensure update* are called properly.
     % Unify param types k, s, q, h. One strategy: make all calls to them
     %   analogous; then combine and eliminate redundancy
     % Having models, conditions, objectives be objects would allow them to be
@@ -38,9 +35,8 @@ classdef FitObject < handle
        nObjectives = 0
        options
        componentMap = zeros(0,3) % nObjectives x 3 double matrix of [modelIdx, conditionIdx, objectiveIdx]; Note: when parts are turned into objects, get rid of this
-       paramsMap = cell(0,4) % nObjectives x 4 cell matrix of [param, seed, input, dose] to T index mapping; 0 indicates not fit; multiple refs to a single T index are summed
-       paramsShared = cell(0,4) % nObjectives x 4 cell matrix of [param, seed, input, dose] shared params index spec
        modelClassMap = [] % nObjectives x 1 double matrix of model class index each objective belongs to
+       paramMapper % ParamMapper object that holds local condition <-> global fit parameter mapping
        nT
    end
    
@@ -62,8 +58,8 @@ classdef FitObject < handle
            %            models. If false, each model class is treated
            %            independently, individual param specs are
            %            unambiguous, and each k, s, q, h for each model class
-           %            has a self contained param spec.
-           %            TODO: implement this
+           %            has a self contained param spec. Note: false assumes a
+           %            single model type.
            %        .Normalized [ logical scalar {true} ]
            %           Indicates if the optimization should be done in log parameters
            %           space
@@ -157,6 +153,7 @@ classdef FitObject < handle
            % Assign fields
            this.Name = name;
            this.options = opts;
+           this.updateParamMapper;
        end
        
        function addOptions(this, opts)
@@ -170,6 +167,14 @@ classdef FitObject < handle
            %
            % TODO: validate inputs
            this.options = mergestruct(this.options, opts);
+       end
+       
+       function updateParamMapper(this)
+           if this.options.ModelsShareParams
+               this.paramMapper = ParamMapperMultiModelType(this.Conditions);
+           else
+               this.paramMapper = ParamMapperOneModelType(this.Conditions);
+           end
        end
        
        %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -559,20 +564,12 @@ classdef FitObject < handle
            %    Parent model's class will be base model class since base/derived
            %    model hierarchy is limited to depth = 2
            parentModelClass = find(ismember(this.modelNames, parentModelName));
-           
-           % Get indices of members of this model class
-           parentModelClassMembers = find(this.modelClassMap == parentModelClass);
-           parentModelClassMembers(parentModelClassMembers==0) = [];
-           
-           % Get paramsShared of all models in the base model class
-           paramsSharedModel = this.paramsShared(this.modelClassMap == parentModelClass);
-           
-           % First look for exactly matching params specs
-           for i = 1:length(paramsSharedModel)
-               if all(paramsSharedModel{i} == useParams)
-                   modelIdx = parentModelClassMembers(i);
-                   return
-               end
+
+           % See if a model with exactly the same params to fit already exists
+           sharedIdx = this.paramMapper.isSharedParamSpec(useParams);
+           if sharedIdx > 0
+               modelIdx = sharedIdx;
+               return
            end
            
            % Next check if base model has an associated experiment
@@ -631,34 +628,37 @@ classdef FitObject < handle
            %        object with current parameters
            %    D [ nT x 1 double vector ]
            %        Gradient w.r.t. all parameters in Theta for fmincon
+           %    H [ nT x nT double matrix ]
+           %        Hessian w.r.t. all parameters in Theta for fmincon
            
            if nargout == 1
                
-               G = 0;
-               
+               Gs = zeros(this.nConditions,1);
                for i = 1:this.nConditions
                    modelIdx = this.Conditions(i).ParentModelIdx;
                    objectives = this.Objectives(this.componentMap(:,2) == i)';
                    
-                   G = G + computeObj(this.Models(modelIdx), this.Conditions(i), objectives, this.options);
+                   Gs(i) = computeObj(this.Models(modelIdx), this.Conditions(i), objectives, this.options);
                end
+               G = sum(Gs);
                
            end
            
            if nargout == 2
                
-               G = 0;
-               D = zeros(this.nT, 1);
-               
+               Gs = zeros(this.nConditions,1);
+               Ds = cell(this.nConditions,4);
                for i = 1:this.nConditions
                    modelIdx = this.Conditions(i).ParentModelIdx;
                    objectives = this.Objectives(this.componentMap(:,2) == i)';
                    
                    [Gi, Di] = computeObjGrad(this.Models(modelIdx), this.Conditions(i), objectives, this.options);
                    
-                   G = G + Gi;
-                   D = mapTlocal2T(Di, this.paramsMap(i,:), this.nT, D, 'add');
+                   Gs(i) = Gi;
+                   Ds(i,:) = Di;
                end
+               G = sum(Gs);
+               D = this.paramMapper.Tlocal2T(Ds, 'sum');
                
            end
            
@@ -691,17 +691,17 @@ classdef FitObject < handle
            %    T [ nT x 1 double vector ]
            %        Vector of main parameters optimized by fmincon.
            
-           T = zeros(this.nT, 1);
-           
-           % Go thru all conditions
+           % Put params in same format as param mapper
+           Tlocals = cell(this.nConditions,4);
            for i = 1:this.nConditions
                parentModelIdx = this.Conditions(i).ParentModelIdx;
                Tlocal = {this.Models(parentModelIdx).k, ...
                    this.Conditions(i).s, ...
                    this.Conditions(i).q, ...
                    this.Conditions(i).h};
-               T = mapTlocal2T(Tlocal, this.paramsMap(i,:), this.nT, T, 'override');
+               Tlocals(i,:) = Tlocal;
            end
+           T = this.paramMapper.Tlocal2T(Tlocals);
        end
        
        function updateParams(this, T)
@@ -714,15 +714,17 @@ classdef FitObject < handle
            % Side Effects:
            %    Updates all models and conditions with T provided
            
-           % Go thru all conditions
+           % Get params in param mapper format
+           Tlocals = this.paramMapper.T2Tlocal(T);
+           
+           % Update conditions with Tlocals
            for i = 1:this.nConditions
                parentModelIdx = this.Conditions(i).ParentModelIdx;
                
-               % Get current param values so new values can be pasted over them
+               % Paste updated param values over old values containing params not fit
                Tlocalold = {this.Models(parentModelIdx).k, this.Conditions(i).s, this.Conditions(i).q, this.Conditions(i).h};
-               Tlocal = mapT2Tlocal(T, this.paramsMap(i,:), Tlocalold);
+               Tlocal = combineCellMats(Tlocalold, Tlocals(i,:));
                [k,s,q,h] = deal(Tlocal{:});
-               
                
                % mergestruct is exactly what's needed here, but I think this is slow
                % This is a prime reason why we should convert components to objects
@@ -741,14 +743,16 @@ classdef FitObject < handle
            %        Vector of lower bounds for params optimized by fmincon
            %    UpperBound [ nT x 1 double vector ]
            %        Vector of upper bounds for params optimized by fmincon
-           LowerBound = zeros(this.nT, 1);
-           UpperBound = zeros(this.nT, 1);
            
-           % Go thru all conditions
+           % Put bounds in same format as param mapper
+           LowerBounds = cell(this.nConditions,4);
+           UpperBounds = cell(this.nConditions,4);
            for i = 1:this.nConditions
-               LowerBound = mapTlocal2T(this.Conditions(i).Bounds(1,:), this.paramsMap(i,:), this.nT, LowerBound, 'override');
-               UpperBound = mapTlocal2T(this.Conditions(i).Bounds(2,:), this.paramsMap(i,:), this.nT, UpperBound, 'override');
+               LowerBounds(i,:) = this.Conditions(i).Bounds(1,:);
+               UpperBounds(i,:) = this.Conditions(i).Bounds(2,:);
            end
+           LowerBound = this.paramMapper.Tlocal2T(LowerBounds);
+           UpperBound = this.paramMapper.Tlocal2T(UpperBounds);
        end
        
        %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -796,11 +800,8 @@ classdef FitObject < handle
            % Update mapping of objectives to their base model classes
            this.updateModelClassMap;
            
-           % Update central params spec locatoin
-           this.updateParamsShared;
-           
-            % Update params mapping and total params vector length
-           this.updateParamsMap;
+           % Update condition <-> fit parameters mapping
+           this.updateParamMapper;
        end
        
        function updateComponentMap(this)
@@ -832,20 +833,6 @@ classdef FitObject < handle
                end
            end
            this.modelClassMap = modelClassMap_;
-       end
-       
-       function updateParamsShared(this)
-           % Update collection of individual condition fitting specs in fit
-           % object. paramsShared is used to more readily calculate paramsSpec
-           paramsShared_ = cell(this.nConditions, 4);
-           for i = 1:this.nConditions
-               paramsShared_(i,:) = this.Conditions(i).ParamsSpec;
-           end
-           this.paramsShared = paramsShared_;
-       end
-       
-       function updateParamsMap(this)
-           [this.paramsMap, this.nT] = getParamsMap(this.paramsShared, this.modelClassMap);
        end
        
    end
@@ -959,112 +946,6 @@ end
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Helper functions
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-function [paramsMap, nT] = getParamsMap(paramsShared, modelClassMap)
-% Update mapping from individual objectives to overall T
-Toffset = 0;
-
-kShared = paramsShared(:,1);
-kMap = multiModelParamsShared2Map(kShared, modelClassMap);
-[kMap, Toffset] = addOffsetToNonzeroCellArray(kMap, Toffset);
-
-sShared = paramsShared(:,2);
-sMap = multiModelParamsShared2Map(sShared, modelClassMap);
-[sMap, Toffset] = addOffsetToNonzeroCellArray(sMap, Toffset);
-
-qShared = paramsShared(:,3);
-qMap = multiModelParamsShared2Map(qShared, modelClassMap);
-[qMap, Toffset] = addOffsetToNonzeroCellArray(qMap, Toffset);
-
-hShared = paramsShared(:,4);
-hMap = multiModelParamsShared2Map(hShared, modelClassMap);
-[hMap, nT] = addOffsetToNonzeroCellArray(hMap, Toffset);
-
-% Updated paramsMap according to (potentially rearranged) specified parameters
-paramsMap = [kMap, sMap, qMap, hMap];
-end
-
-function [cellOut, offsetOut] = addOffsetToNonzeroCellArray(cellIn, offset)
-% Add offset to all nonzero values in cell array
-% Also return new offset value
-% Assumes cell vertical cell vector
-nCells = length(cellIn);
-cellOut = cell(nCells,1);
-offsetAccumulate = 0;
-for i = 1:nCells
-    if ~isempty(cellIn{i}) && max(cellIn{i}) > offsetAccumulate
-        offsetAccumulate = max(cellIn{i});
-    end
-    cellOut{i} = (cellIn{i} + offset) .* logical(cellIn{i}); % selecting with logical restores 0's filled in by offset
-end
-offsetOut = offset + offsetAccumulate;
-end
-
-function paramsMap = multiModelParamsShared2Map(paramsShared, modelClassMap)
-% Inputs:
-%    paramsShared [ cell vector nObjective x 1 ]
-%    modelClassMap [ double vector nObjective x 1 ]
-%       Indices refer to which groups of models use the same base model
-% Outputs:
-%    paramsMap [ cell vector nObjective x 1 ]
-%
-% Note: logically, rate params are treated differently in
-% different models while seeds, input control params, and dose
-% control params may be more conveniently treated the same in the
-% same conditions, regardless of dummy underlying model for
-% changed k
-
-% Treat different base models separately
-modelClasses = unique(modelClassMap, 'stable');
-Toffset = 0;
-paramsMap = cell(size(paramsShared));
-for modelClass = modelClasses
-    
-    paramsSharedModel = paramsShared(modelClassMap == modelClass);
-    nCons = length(paramsSharedModel);
-    nParams = length(paramsSharedModel{1});
-    
-    paramsSharedMatrix = zeros(nParams, nCons);
-    for i = 1:nCons
-        paramsSharedMatrix(:,i) = paramsSharedModel{i};
-    end
-    
-    paramsMapMatrix = paramsShared2Map(paramsSharedMatrix) + Toffset;
-    paramsMapMatrix(~logical(paramsSharedMatrix)) = 0; % restore 0's to spots overridden by Toffset
-    
-    paramsMapModel = cell(nCons, 1);
-    for i = 1:nCons
-        paramsMapModel(i) = {paramsMapMatrix(:,i)};
-    end
-    
-    paramsMap(modelClassMap == modelClass) = paramsMapModel;
-    Toffset = max(paramsMapMatrix);
-    
-end
-end
-
-function paramsMap = paramsShared2Map(paramsShared)
-% Input:
-%    paramsShared: double matrix nk x ncon with rows of
-%        shared/unique k
-% Output:
-%    paramsMap: double matrix nk x ncon with rows of
-%        positions in T, relative to 1st fit k in paramsShared
-[nk, nCon] = size(paramsShared);
-paramsMap = zeros(nk, nCon);
-Toffset = 0;
-for i = 1:nk
-    kUse = paramsShared(i,:);
-    kNonZero = logical(kUse);
-    kUse = kUse(kNonZero);
-    [c,~,ic] = unique(kUse, 'stable');
-    
-    Tidx = ic' + Toffset;
-    
-    paramsMap(i,kNonZero) = Tidx;
-    Toffset = Toffset + nnz(c);
-end
-end
-
 function fixedBounds = fixBounds(bounds, n)
 % Convert bounds into standard format.
 % Inputs:
@@ -1137,106 +1018,3 @@ switch nParams
         error('FitObject:fixParamsSpec: Number of params specs %d not equal to number params %d', nParams, n)
 end
 end
-
-function Tlocal = mapT2Tlocal(T, Tmap, Tlocalold)
-% Map overall T vector to local T's in conditions.
-% Inputs:
-%    T [ nT x 1 double vector ]
-%    Tmap [ 1 x n cell vector of nk x 1 double vectors ]
-%    Tlocal [ optional 1 x 4 cell vector of nk x 1 double vectors ]
-%       Optional vase Tlocal cell array that's overridden if supplied
-% Outputs:
-%    Tlocal [ 1 x 4 cell vector of nk x 1 double vectors ]
-
-if nargin < 3
-    Tlocalold = [];
-end
-
-n = length(Tmap);
-sizes = zeros(1,n);
-for i = 1:n
-    sizes(i) = size(Tmap{i},1);
-end
-
-Tlocal = cell(1,n);
-for i = 1:n
-    
-    if isempty(Tlocalold)
-        Tlocal_i = zeros(sizes(i),1);
-    else
-        Tlocal_i = Tlocalold{i};
-    end
-    
-    Tmap_i = Tmap{i};
-    for j = 1:sizes(i)
-        Tidx = Tmap_i(j);
-        if Tidx ~= 0
-            Tlocal_i(j) = T(Tidx);
-        end
-    end
-    Tlocal{i} = Tlocal_i;
-end
-
-end
-
-function T = mapTlocal2T(Tlocal, Tmap, nT, Told, mode)
-% Map local T's in conditions to overall T vector. Allows summing at positions to overlay T.
-% Inputs:
-%   Tlocal [ 1 x 4 cell vector of nk x 1 double vectors ]
-%   Tmap [ 1 x 4 cell vector of nk x 1 double vectors ]
-%   nT [ scalar double ]
-%       Total number of T parameters
-%   Told [ optional nT x 1 double vector ]
-%       Optional base vector that's overridden or added to depending
-%       on mode
-%   mode [ optional string {'override'} ]
-%       What newly mapped Tlocal>T should do. If 'override', replace
-%       current T with Tlocal value. Used for updating parameters.
-%       If 'add', add new value from Tlocal to old T value. Used for
-%       gradient calculation.
-% Outputs:
-%    T [ 1 x nT double vector ]
-if nargin < 5
-    mode = [];
-    if nargin < 4
-        Told = [];
-    end
-end
-
-if isempty(mode)
-    mode = 'override';
-end
-
-n = length(Tmap);
-sizes = zeros(1,n);
-for i = 1:n
-    sizes(i) = size(Tmap{i},1);
-end
-
-if isempty(Told)
-    Told = zeros(nT, 1);
-end
-
-T = Told;
-for i = 1:n
-    Tlocal_i = Tlocal{i};
-    Tmap_i = Tmap{i};
-    
-    % Sanity check: Tlocal and Tmap have the same dimensions
-    assert(length(Tlocal_i) == length(Tmap_i), 'FitObject:mapTlocal2T: Tlocal and Tmap have different dimensions')
-    
-    for j = 1:sizes(i)
-        Tidx = Tmap_i(j);
-        if Tidx ~= 0
-            switch mode
-                case 'override'
-                    T(Tidx) = Tlocal_i(j);
-                case 'add'
-                    T(Tidx) = T(Tidx) + Tlocal_i(j);
-            end
-        end
-    end
-end
-
-end
-

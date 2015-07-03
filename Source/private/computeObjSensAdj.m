@@ -9,7 +9,7 @@ nTs = nnz(opts.UseSeeds);
 nTq = nnz(opts.UseInputControls);
 nTh = nnz(opts.UseDoseControls);
 nT = nTk + nTs + nTq + nTh;
-Tmap = {opts.UseParams; opts.UseSeeds; opts.UseInputControls; opts.UseDoseControls};
+paramMapper = ParamMapperOneModelType(con);
 nObj = size(obj,1);
 
 y = m.y;
@@ -163,7 +163,7 @@ if verboseAll; fprintf('|dGdT| = %g\tTime = %0.2f\n', norm(curD), toc); end
 if opts.Verbose; fprintf('Summary: |dGdT| = %g\n', norm(D)); end
 
 % Convert gradient to standard form for local T
-D = mapT2Tlocal(D, Tmap);
+D = paramMapper.T2Tlocal(D);
 
 % End of function
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

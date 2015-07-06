@@ -1,7 +1,20 @@
 function G = computeObj(m, con, obj, opts)
-% G = computeObj(m, con, obj, opts)
-% This function computes the total objective function value for a vector of
-% con and a matrix of obj.
+% Compute objective function value w.r.t. params used in condition and model
+% Inputs:
+%   m [ model struct ]
+%       Single model
+%   con [ condition struct ]
+%       Single condition built off model
+%   obj [ nObj vector of objective structs ]
+%       Objective functions belonging to this condition
+%   opts [ struct ]
+%       Options struct
+%       
+% Outputs:
+%   G [ scalar double ]
+%       Objective function value at params specified in m and con
+%
+% Note: this function has been simplified to only allow a single condition
 verbose = logical(opts.Verbose);
 verbose_all = max(verbose-1,0);
 
@@ -15,7 +28,7 @@ opts.UseDoseControls  = logical(con.ParamsSpec{4});
 
 opts.continuous = any(obj(:).Continuous);
 opts.RelTol = con.RelTol;
-AbsTol = fixAbsTol(con.AbsTol, 2, opts.continuous, m.nx, 1, opts.UseAdjoint, opts.UseParams, opts.UseSeeds, {opts.UseInputControls}, {opts.UseDoseControls});
+AbsTol = fixAbsTol(con.AbsTol, 1, opts.continuous, m.nx, 1, opts.UseAdjoint, opts.UseParams, opts.UseSeeds, {opts.UseInputControls}, {opts.UseDoseControls});
 opts.AbsTol = AbsTol{1};
 opts.ObjWeights = [obj(:).Weight];
 

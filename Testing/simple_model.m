@@ -63,6 +63,7 @@ end
 
 % Options
 opts.RelTol = 1e-6;
+opts.UseAdjoint = false;
 opts.Verbose = 0;
 opts.UseParams = [1;3;5];
 opts.UseSeeds = [2;3];

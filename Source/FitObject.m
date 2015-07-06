@@ -416,6 +416,7 @@ classdef FitObject < handle
            %    parentConditions [ string | cell array of strings {1st condition} ]
            %        names of conditions to associate with
            %    opts [ struct {[]} ]
+           %        Options struct allowing the following fields:
            %        .Weight [ double {1} ]
            %            Relative weight of this objective function when multiple
            %            are summed together in fit object. Simply acts as a
@@ -621,7 +622,7 @@ classdef FitObject < handle
        %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
        % Called inside optimizer's loop
        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-       function [G, D] = computeObjective(this)
+       function [G, D, H] = computeObjective(this)
            % Outputs:
            %    G [ double scalar ]
            %        Objective function value from sum of all objectives in fit
@@ -647,7 +648,7 @@ classdef FitObject < handle
            if nargout == 2
                
                Gs = zeros(this.nConditions,1);
-               Ds = cell(this.nConditions,4);
+               Ds = cell(this.nConditions,1);
                for i = 1:this.nConditions
                    modelIdx = this.Conditions(i).ParentModelIdx;
                    objectives = this.Objectives(this.componentMap(:,2) == i)';
@@ -655,7 +656,7 @@ classdef FitObject < handle
                    [Gi, Di] = computeObjGrad(this.Models(modelIdx), this.Conditions(i), objectives, this.options);
                    
                    Gs(i) = Gi;
-                   Ds(i,:) = Di;
+                   Ds(i) = Di;
                end
                G = sum(Gs);
                D = this.paramMapper.Tlocal2T(Ds, 'sum');
@@ -664,23 +665,22 @@ classdef FitObject < handle
            
            if nargout == 3
                
-               % TODO: convert computeObjHess and mapHlocal2H
-               error('computeObjHess not implemented yet')
-               
-               G = 0;
-               D = zeros(this.nT, 1);
-               H = zeros(this.nT, this.nT);
-               
+               Gs = zeros(this.nConditions,1);
+               Ds = cell(this.nConditions,1);
+               Hs = cell(this.nConditions,1);
                for i = 1:this.nConditions
                    modelIdx = this.Conditions(i).ParentModelIdx;
                    objectives = this.Objectives(this.componentMap(:,2) == i)';
                    
                    [Gi, Di, Hi] = computeObjHess(this.Models(modelIdx), this.Conditions(i), objectives, this.options);
                    
-                   G = G + Gi;
-                   D = mapTlocal2T(Di, this.paramsMap(i,:), this.nT, D, 'add');
-                   H = mapHlocal2H(Hi, this.paramsMap(i,:), this.nT, H, 'add');
+                   Gs(i) = Gi;
+                   Ds(i) = Di;
+                   Hs(i) = Hi;
                end
+               G = sum(Gs);
+               D = this.paramMapper.Tlocal2T(Ds, 'sum');
+               H = this.paramMapper.Tlocal2T(Hs, 'sum');
                
            end
        end
@@ -692,14 +692,14 @@ classdef FitObject < handle
            %        Vector of main parameters optimized by fmincon.
            
            % Put params in same format as param mapper
-           Tlocals = cell(this.nConditions,4);
+           Tlocals = cell(this.nConditions,1);
            for i = 1:this.nConditions
                parentModelIdx = this.Conditions(i).ParentModelIdx;
-               Tlocal = {this.Models(parentModelIdx).k, ...
-                   this.Conditions(i).s, ...
-                   this.Conditions(i).q, ...
+               Tlocal = {this.Models(parentModelIdx).k; ...
+                   this.Conditions(i).s; ...
+                   this.Conditions(i).q; ...
                    this.Conditions(i).h};
-               Tlocals(i,:) = Tlocal;
+               Tlocals{i} = Tlocal;
            end
            T = this.paramMapper.Tlocal2T(Tlocals);
        end
@@ -723,7 +723,7 @@ classdef FitObject < handle
                
                % Paste updated param values over old values containing params not fit
                Tlocalold = {this.Models(parentModelIdx).k, this.Conditions(i).s, this.Conditions(i).q, this.Conditions(i).h};
-               Tlocal = combineCellMats(Tlocalold, Tlocals(i,:));
+               Tlocal = combineCellMats(Tlocalold, Tlocals{i});
                [k,s,q,h] = deal(Tlocal{:});
                
                % mergestruct is exactly what's needed here, but I think this is slow
@@ -745,11 +745,11 @@ classdef FitObject < handle
            %        Vector of upper bounds for params optimized by fmincon
            
            % Put bounds in same format as param mapper
-           LowerBounds = cell(this.nConditions,4);
-           UpperBounds = cell(this.nConditions,4);
+           LowerBounds = cell(this.nConditions,1);
+           UpperBounds = cell(this.nConditions,1);
            for i = 1:this.nConditions
-               LowerBounds(i,:) = this.Conditions(i).Bounds(1,:);
-               UpperBounds(i,:) = this.Conditions(i).Bounds(2,:);
+               LowerBounds{i} = this.Conditions(i).Bounds(1,:)';
+               UpperBounds{i} = this.Conditions(i).Bounds(2,:)';
            end
            LowerBound = this.paramMapper.Tlocal2T(LowerBounds);
            UpperBound = this.paramMapper.Tlocal2T(UpperBounds);
@@ -894,7 +894,8 @@ classdef FitObject < handle
            useDoseControls = fixUseControls(opts.UseDoseControls, nCon, cat(1,conditions.nh));
            
            % Standardize AbsTol
-           absTol = fixAbsTol(opts.AbsTol, 2, opts.continuous, nx, nCon, opts.UseAdjoint, useParams, useSeeds, useInputControls, useDoseControls);
+           absTol = {opts.AbsTol};
+%            absTol = fixAbsTol(opts.AbsTol, 2, opts.continuous, nx, nCon, opts.UseAdjoint, useParams, useSeeds, useInputControls, useDoseControls);
            
            % Make new fit object
            fit = FitObject('ConvertedFit');

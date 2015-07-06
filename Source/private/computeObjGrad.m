@@ -1,4 +1,24 @@
 function [G, D] = computeObjGrad(m, con, obj, opts)
+% Compute gradient of objective function w.r.t. params used in condition and
+% model
+% Inputs:
+%   m [ model struct ]
+%       Single model
+%   con [ condition struct ]
+%       Single condition built off model
+%   obj [ nObj vector of objective structs ]
+%       Objective functions belonging to this condition
+%   opts [ struct ]
+%       Options struct
+%       
+% Outputs:
+%   G [ scalar double ]
+%       Objective function value at params specified in m and con
+%   D [ 1 x 1 cell of 4 x 1 cell vector of nXi x 1 double vectors ]
+%       Objective function gradient w.r.t. params used in m and con in standard
+%       Tlocal form
+%
+% Note: this function has been simplified to only allow a single condition
 
 % Process options
 % Note: this currently acts as a shim to existing code - a lot of this can be
@@ -21,7 +41,6 @@ if opts.UseAdjoint
 end
 
 % Continue with forward method
-verbose_all = max(opts.Verbose-1,0);
 
 % Constants
 nx = m.nx;
@@ -35,6 +54,7 @@ paramMapper = ParamMapperOneModelType(con);
 nObj = length(obj);
 
 if opts.Verbose; fprintf('Integrating sensitivities:\n'); end
+verbose_all = max(opts.Verbose-1,0);
 if verbose_all; tic; end
 
 % Integrate

@@ -28,5 +28,5 @@ Hdisc = FiniteObjectiveHessian(m, con, obj, opts);
 a.verifyEqual(size(Hfwd), [nT,nT])
 a.verifyEqual(size(Hdisc), [nT,nT])
 
-a.verifyEqual(Hfwd, Hdisc, 'RelTol', 0.001, 'AbsTol', 1e-4)
+a.verifyEqual(Hfwd, Hdisc, 'RelTol', 1e-3, 'AbsTol', 1e-4)
 end

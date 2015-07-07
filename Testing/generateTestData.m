@@ -5,7 +5,9 @@ function [outputsList, timesList, measurementsList] = generateTestData(m, expt, 
 times = vec(times);
 
 % Simulate system
-sim = SimulateSystem(m, expt, times(end));
+opts = [];
+opts.Verbose = 0;
+sim = SimulateSystem(m, expt, times(end), opts);
 
 % Get output indices
 outputNames = {m.Outputs.Name};

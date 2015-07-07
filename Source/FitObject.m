@@ -527,16 +527,40 @@ classdef FitObject < handle
                condition = this.Conditions(1);
            end
            
-           % If params are specified to be fit, verify and possibly add dummy model
+           % Check if specified fit params match an existing model/condition; if
+           % condition specifies different fit params for an existing model,
+           % make a dummy model. Needed because models specify k inside them
            if isfield(opts, 'UseParams')
-               UseParams = vec(opts.UseParams);
-               assert(this.Models(ismember(this.modelNames, condition.ParentModelName)).nk == length(UseParams), 'FitObject:addFitConditionData: Number of UseParams doesn''t match number of model rate params')
                
-               % Add dummy model if k is to be fit independently
-               modelIdx = this.addModelOnUniqueParam(UseParams, condition.ParentModelName);
-               condition.ParentModelName = this.modelNames{modelIdx};
+               opts.UseParams = vec(opts.UseParams);
                
-               opts.UseParams = UseParams;
+               % Check existing models for existence of valid parent model
+               parentModelName = condition.ParentModelName;
+               
+               assert(any(ismember(this.modelNames, parentModelName)), 'FitObject:addFitConditionData: Parent model %s does not exist.', parentModelName)
+               assert(this.Models(ismember(this.modelNames, parentModelName)).nk == length(opts.UseParams), 'FitObject:addFitConditionData: Number of UseParams doesn''t match number of model rate params')
+               
+               % parentModelIdx = 0 for no valid model; positive integer for valid model to attach to
+               % See if a model with exactly the same params to fit already exists
+               parentModelIdx = this.paramMapper.isSharedParamSpec(opts.UseParams);
+               
+               % See if valid parent model w/o an attached condition exists
+               if parentModelIdx == 0 && ~this.hasAttachedCondition(parentModelName)
+                   parentModelIdx = find(ismember(this.modelNames, parentModelName));
+               end
+               
+               % Add dummy model if no valid model to attach to (existing parent model attached to other condition)
+               if parentModelIdx == 0
+                   model_ = this.getModel(parentModelName);
+                   model_.Name = [model_.Name '_der' num2str(this.nModels)];
+                   opts_ = [];
+                   opts_.BaseModel = parentModelName;
+                   this.addModel(model_, opts_)
+                   parentModelIdx = this.nModels; % attach to last/newly created model
+               end
+               
+               % Attach condition to model
+               condition.ParentModelName = this.modelNames{parentModelIdx};
            end
            
            % Add components to fit
@@ -544,49 +568,22 @@ classdef FitObject < handle
            this.addObjective(objective, condition.Name, opts);
        end
        
-       function modelIdx = addModelOnUniqueParam(this, useParams, parentModelName)
-           % Add a new "dummy" model if useParams specifies unique rate parameters
-           % from any existing for the specified parent modelName.
-           % Returns index of model that useParams will refer to, either for an
-           % existing model if they match or a new one if it needed to be
-           % generated.
+       function attached = hasAttachedCondition(this, modelName)
+           % Get whether or not model specified by modelName has an attached condition
            % Inputs:
-           %    useParams [ nk x 1 double vector ]
-           %        Shared/unique param spec
-           %    parentModelName [ string ]
-           %        String name of parent model class this param set refers to
+           %    modelName [ string ]
+           %        Name of model in FitObject to test
            % Outputs:
-           %    modelIdx [ scalar integer ]
-           %        Index of the model useParams/modelName should refer to
-           % Side Effects:
-           %    Adds a new model to the fit object if needed (trying to fit any unique k)
-               
-           % Get base model class (index) of specified modelName
-           %    Parent model's class will be base model class since base/derived
-           %    model hierarchy is limited to depth = 2
-           parentModelClass = find(ismember(this.modelNames, parentModelName));
-
-           % See if a model with exactly the same params to fit already exists
-           sharedIdx = this.paramMapper.isSharedParamSpec(useParams);
-           if sharedIdx > 0
-               modelIdx = sharedIdx;
+           %    attached [ scalar boolean ]
+           %        Whether or not model has an attached condition
+           attached = false;
+           if isempty(this.Conditions) % no conditions attached to anything yet
                return
            end
-           
-           % Next check if base model has an associated experiment
-           % If not, attach to that
-           if isempty(ismember(this.componentMap(:,1), parentModelClass))
-               modelIdx = parentModelClass;
-               return
+           parentModelNames = {this.Conditions.ParentModelName};
+           if any(ismember(parentModelNames, modelName))
+               attached = true;
            end
-           
-           % No matches - make new model
-           model_ = this.getModel(parentModelName);
-           model_.Name = [model_.Name '_der' num2str(this.nModels)];
-           opts = [];
-           opts.BaseModel = parentModelName;
-           this.addModel(model_, opts)
-           modelIdx = this.nModels; % will refer to index of last model
        end
        
        function model = getModel(this, name)

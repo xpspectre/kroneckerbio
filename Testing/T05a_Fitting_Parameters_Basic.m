@@ -1,6 +1,8 @@
-%% Construct equilibrium experiment A + B <-> C
+% Test/tutorial script for basic parameter fitting using original fitting notation
 clear; close all; clc
+rng('default')
 
+%% Construct equilibrium experiment A + B <-> C
 m = InitializeModel('Equilibrium');
 
 m = AddCompartment(m, 'Solution', 3, 1);

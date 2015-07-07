@@ -47,8 +47,6 @@ function varargout = FitObjective(varargin)
 %   Generally compatible with old (single model, vector of conditions, matrix of
 %   objectives) and new (FitObject) forms of specifying fitting scheme. Outputs
 %   results in the same format as input.
-%   TODO: reimplement some functionality with UseParams and related, bounds, and
-%   absolute tolerance that the new method broke.
 
 % (c) 2015 David R Hagen & Bruce Tidor
 % This work is released under the MIT license.

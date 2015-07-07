@@ -35,7 +35,8 @@ classdef ParamMapperOneModelType < ParamMapper
        function sharedIdx = isSharedParamSpec(this, UseParams)
            % Tests whether condition's UseParams matches an existing one -
            % used by addModelOnUniqueParam to determine whether a new model
-           % needs to be created.
+           % needs to be created. Implicitly requires that all models be the
+           % same type
            sharedIdx = 0;
            nCon = size(this.paramsShared, 1);
            for i = 1:nCon

@@ -70,7 +70,7 @@ simFit2 = SimulateSystem(fitOut.Models(2), fitOut.Conditions(2), tF);
 figure
 subplot(1,2,1)
 hold on
-plot(timesFine, simFit1.y(timesFine,:)')
+plot(timesFine, simFit1.y(timesFine)')
 ax = gca;
 ax.ColorOrderIndex = 1;
 plot(times, measurements1, '+')
@@ -82,7 +82,7 @@ hold off
 
 subplot(1,2,2)
 hold on
-plot(timesFine, simFit2.y(timesFine,:)')
+plot(timesFine, simFit2.y(timesFine)')
 ax = gca;
 ax.ColorOrderIndex = 1;
 plot(times, measurements2, '+')

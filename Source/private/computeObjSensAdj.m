@@ -2,6 +2,7 @@ function [G, D] = computeObjSensAdj(m, con, obj, opts)
 verboseAll = max(opts.Verbose-1,0);
 if verboseAll; tic; end
 
+%% Set up system
 % Constants
 nx = m.nx;
 nTk = nnz(opts.UseParams);
@@ -14,8 +15,8 @@ nObj = size(obj,1);
 
 y = m.y;
 dydx = m.dydx;
-
-Tsind = nTk; % position of 1st x0 parameter
+dydu = m.dydu;
+dydk = m.dydk;
 
 % Initialize variables
 G = 0;
@@ -34,16 +35,15 @@ d = con.d;
 % * Integrate to steady-state
 if con.SteadyState
     ssSol = integrateSteadystateSys(m, con, opts);
-    
-    % Apply steady-state solution to initial conditions
-    ic = ssSol.y(:,end);
+    ic = ssSol.ye(:,end);
 else
-    ic = m.dx0ds * s + m.x0c;
+    order = 0;
+    ic = extractICs(m, con, opts, order);
 end
 
 [tF, eve, fin] = collectObservations(m, con, obj(:));
 
-% * Integrate system *
+%% Integrate system
 % Do not use select methods since the solution is needed at all time
 if opts.continuous
     [der, jac, del] = constructObjectiveSystem();
@@ -54,6 +54,7 @@ else
 end
 
 % Work down
+int_sys = struct;
 int_sys.Type = 'Integration.System.Complex';
 int_sys.Name = [m.Name ' in ' con.Name];
 
@@ -85,9 +86,18 @@ int_sys.ye = y(int_sys.te, int_sys.xe, int_sys.ue);
 
 int_sys.sol = sol_sys;
 
+int_sys.UseParams = opts.UseParams;
+int_sys.UseSeeds = opts.UseSeeds;
+
 % Distribute times for each observation
 int_sys = repmat(int_sys, nObj,1);
-for j = 1:nObj
+
+% Determine which objectives to evaluate for this experiment (those
+% that are not objectiveZero)
+isobjzero = strcmp('Objective.Data.Zero',{obj(:).Type});
+nonZeroObjs = find(~isobjzero);
+
+for j = nonZeroObjs
     if obj(j).Complex
         % Only reveal time points in range of observation
         % Note: deval will still not throw an error outside this range
@@ -101,7 +111,7 @@ for j = 1:nObj
     end
 end
 
-% *Compute G*
+%% Compute G
 % Extract continuous term
 if opts.continuous
     G_cont = int_sys(1).sol.y(nx+1,end);
@@ -112,7 +122,7 @@ end
 % Compute discrete term
 G_disc = 0;
 discrete_times_all = cell(nObj,1);
-for j = 1:nObj
+for j = nonZeroObjs
     [iDiscG, temp] = obj(j).G(int_sys(j));
     discrete_times_all{j} = row(unique(temp));
     G_disc = G_disc + opts.ObjWeights(j) * iDiscG;
@@ -123,7 +133,8 @@ discrete_times = vec(unique([discrete_times_all{:}]));
 % Add to cumulative goal value
 G = G + G_cont + G_disc;
 
-% * Integrate Adjoint *
+
+%% Integrate Adjoint
 % Construct system
 [der, jac, del] = constructAdjointSystem();
 
@@ -133,7 +144,7 @@ ic = zeros(nx+nT,1);
 % Integrate [lambda; D] backward in time
 sol = accumulateOdeRevSelect(der, jac, 0, tF, ic, [con.Discontinuities; discrete_times], 0, [], opts.RelTol, opts.AbsTol(nx+opts.continuous+1:nx+opts.continuous+nx+nT), del);
 
-% * Complete steady-state *
+%% Complete steady-state
 if con.SteadyState
     % * Start Adjoint again *
     [der, jac] = constructSteadystateSystem();
@@ -142,10 +153,10 @@ if con.SteadyState
     ic = sol.y;
     
     % Integrate [lambda; D] backward in time and replace previous run
-    sol = accumulateOdeRevSelect(der, jac, 0, ssSol.x(end), ic, [], 0, [], opts.RelTol, opts.AbsTol(nx+opts.continuous+1:nx+opts.continuous+nx+nT));
+    sol = accumulateOdeRevSelect(der, jac, 0, ssSol.xe, ic, con.private.BasalDiscontinuities, 0, [], opts.RelTol, opts.AbsTol(nx+opts.continuous+1:nx+opts.continuous+nx+nT));
 end
 
-% *Add contributions to derivative*
+%% Add contributions to derivative
 % (Subtract contribution because gradient was integrated backward)
 
 % Rate parameters
@@ -153,7 +164,8 @@ curD = -sol.y(nx+1:end,end);
 
 % Initial conditions
 lambda = -sol.y(1:nx,end);
-curD(Tsind+1:Tsind+nTs) = vec(curD(Tsind+1:Tsind+nTs)) + m.dx0ds(:,opts.UseSeeds).' * lambda;
+dx0ds_val = m.dx0ds(con.s);
+curD(nTk+1:nTk+nTs) = vec(curD(nTk+1:nTk+nTs)) + dx0ds_val(:,opts.UseSeeds).' * lambda;
 
 % Add to cumulative goal value
 D = D + curD;
@@ -172,13 +184,13 @@ D = paramMapper.T2Tlocal(D);
 %%%%% The system for integrating lambda and D %%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     function [der, jac, del] = constructAdjointSystem()
-        dx0ds = m.dx0ds;
-        dfdx = m.dfdx;
-        dfdu = m.dfdu;
-        dfdk = m.dfdk;
-        dfdT = @dfdTSub;
-        dudq = con.dudq;
-        dddh = con.dddh;
+        dx0dd   = m.dx0ds;
+        dfdx    = m.dfdx;
+        dfdu    = m.dfdu;
+        dfdk    = m.dfdk;
+        dfdT    = @dfdTSub;
+        dudq    = con.dudq;
+        dddh    = con.dddh;
         
         der = @derivative;
         jac = @jacobian;
@@ -215,21 +227,25 @@ D = paramMapper.T2Tlocal(D);
             u_i = u(t);
             x_i = deval(sol_sys, t, 1:nx);
             dydx_i = dydx(t, x_i, u_i);
+            dydu_i = dydu(t, x_i, u_i);
+            dydk_i = dydk(t, x_i, u_i);
             dGdx = zeros(nx,1);
             dGdT = zeros(nT,1);
             for i = 1:nObj
-                dGdx = dGdx + dydx_i.' * opts.ObjWeights(i)*obj(i).dGdy(t, int_sys(i));
-                dGdk = obj(i).dGdk(int_sys(i)); % k_ % partial dGdk(i)
+                dGdy = obj(i).dGdy(t, int_sys(i));
+                dGdx = dGdx + dydx_i.' * opts.ObjWeights(i)*dGdy;
+                dGdk = obj(i).dGdk(int_sys(i)) + dydk_i.' * dGdy; % k_ % partial dGdk(i)
                 dGds = obj(i).dGds(int_sys(i)); % s_ % partial dGds(i)
-                dGdq = obj(i).dGdq(int_sys(i)); % q_ % partial dGdq(i)
-                dGdh = obj(i).dGdh(int_sys(i)); % h_ % partial dGdq(i)
+                dGdq = obj(i).dGdq(int_sys(i)) + dudq(t).' * dydu_i.' * dGdy; % q_ % partial dGdq(i)
+                dGdh = obj(i).dGdh(int_sys(i)); % h_ % partial dGdh(i)
                 dGdT = dGdT + opts.ObjWeights(i)*[dGdk(opts.UseParams); dGds(opts.UseSeeds); dGdq(opts.UseInputControls); dGdh(opts.UseDoseControls)]; % T_ + (k_ -> T_) -> T_
             end
             
             lambda = -joint(1:nx,end) + dGdx; % Update current lambda
+            dx0dd_i = dx0dd(d(t));
             dddh_i = dddh(t);
             dddh_i = dddh_i(:,opts.UseDoseControls);
-            dose_change = dddh_i.' * dx0ds.' * lambda;
+            dose_change = dddh_i.' * dx0dd_i.' * lambda;
             dGdT = dGdT + [zeros(nTk,1); zeros(nTs,1); zeros(nTq,1); dose_change];
             
             val = [dGdx; dGdT];
@@ -248,45 +264,43 @@ D = paramMapper.T2Tlocal(D);
         dfdu = m.dfdu;
         dfdk = m.dfdk;
         dfdT = @dfdTSub;
-        if opts.UseModelInputs
-            dudq = m.dudq;
-        else
-            dudq = con.dudq;
-        end
+        basal_u = con.private.basal_u;
+        basal_dudq = con.private.basal_dudq;
         
         der = @derivative;
         jac = @jacobian;
         
         % Derivative of [lambda; D] with respect to time
         function val = derivative(t, joint)
-            ui = u(-1);
+            ui = basal_u(t);
             x = deval(ssSol, t, 1:nx);
             l = joint(1:nx);
             
-            val = -[dfdx(-1,x,ui).'; dfdT(-1,x,ui).'] * l;
+            val = -[dfdx(-1,x,ui).'; dfdT(t,x,ui).'] * l;
         end
         
         % Jacobian of [lambda; D] derivative
         function val = jacobian(t, joint)
-            ui = u(-1);
+            ui = basal_u(t);
             x = deval(ssSol, t, 1:nx);
             
             val = [-dfdx(-1,x,ui).', sparse(nx,nT);
-                   -dfdT(-1,x,ui).', sparse(nT,nT)];
+                   -dfdT(t,x,ui).', sparse(nT,nT)];
         end
         
         % Modifies dfdk to relate only to the parameters of interest
         function val = dfdTSub(t, x, u)
             val = dfdk(-1,x,u);
-            dfdq = dfdu(-1,x,u) * dudq(-1);
+            dfdq = dfdu(-1,x,u) * basal_dudq(t);
             val = [val(:,opts.UseParams), zeros(nx,nTs), dfdq(:,opts.UseInputControls), sparse(nx,nTh)];
         end
     end
 
     function [der, jac, del] = constructObjectiveSystem()
-        f     = m.f;
-        dfdx  = m.dfdx;
-        dx0ds = m.dx0ds;
+        f       = m.f;
+        dfdx    = m.dfdx;
+        x0      = m.x0;
+        nd      = m.ns;
         
         der = @derivative;
         jac = @jacobian;
@@ -323,14 +337,15 @@ D = paramMapper.T2Tlocal(D);
 
         % Dosing
         function val = delta(t, joint)
-            val = [dx0ds * d(t); 0];
+            val = [x0(d(t)) - x0(zeros(nd,1)); 0];
         end
     end
 
     function [der, jac, del] = constructSystem()
         f     = m.f;
         dfdx  = m.dfdx;
-        dx0ds = m.dx0ds;
+        x0    = m.x0;
+        nd    = m.ns;
         
         der = @derivative;
         jac = @jacobian;
@@ -350,7 +365,7 @@ D = paramMapper.T2Tlocal(D);
         
         % Dosing
         function val = delta(t, x)
-            val = dx0ds * d(t);
+            val = x0(d(t)) - x0(zeros(nd,1));
         end
     end
 end

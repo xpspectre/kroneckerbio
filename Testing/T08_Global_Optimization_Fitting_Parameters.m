@@ -1,9 +1,9 @@
 % Global optimization example
 %   Could use a better test system with known multiple local minima
-clear; close all; clc
+error('Global optimization is currently broken in this branch.')
 
 %% Construct equilibrium experiment A + B <-> C
-m = InitializeModel('Equilibrium');
+m = InitializeModelMassActionAmount('Equilibrium');
 
 m = AddCompartment(m, 'Solution', 3, 1);
 

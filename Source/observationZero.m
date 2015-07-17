@@ -27,6 +27,8 @@ obs.Simulation = @empty_simulation;
 obs.Sensitivity = @empty_sensitivity;
 obs.Curvature = @empty_curvature;
 
+obs.Lna = @empty_lna;
+
 obs.Objective = @(int)objectiveZero();
 
 % Return the observation at the requested size
@@ -53,6 +55,12 @@ end
 
 function sim = empty_curvature(int)
 sim.Type = 'Simulation.Curvature.Zero';
+sim.Name = int.Name;
+sim.int = int;
+end
+
+function sim = empty_lna(int)
+sim.Type = 'Simulation.Lna.Zero';
 sim.Name = int.Name;
 sim.int = int;
 end

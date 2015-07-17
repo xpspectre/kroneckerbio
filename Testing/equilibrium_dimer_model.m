@@ -1,6 +1,6 @@
 function m = equilibrium_dimer_model
 % Slightly more complicated mass action model with seeds
-m = InitializeModel('Equilibrium_Dimer');
+m = InitializeModelMassActionAmount('Equilibrium_Dimer');
 
 m = AddCompartment(m, 'Solution', 3, 1);
 
@@ -24,7 +24,7 @@ m = AddParameter(m, 'kr', 3);
 m = AddParameter(m, 'kAf', 5);
 m = AddParameter(m, 'kAr', 5);
 
-m = AddReaction(m, '', '', 'A', 'A', 'A:A', '', 'kAf', 'kAr');
-m = AddReaction(m, '', '', 'A:A', 'B', 'C', '', 'kf', 'kr');
+m = AddReaction(m, 'r1', 'A', 'A', 'A:A', '', 'kAf', 'kAr');
+m = AddReaction(m, 'r2', 'A:A', 'B', 'C', '', 'kf', 'kr');
 
 m = FinalizeModel(m);

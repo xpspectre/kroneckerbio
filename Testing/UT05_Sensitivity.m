@@ -29,6 +29,16 @@ tGet = 1:6;
 verifySensitivity(a, m, con, tGet, opts)
 end
 
+function testSimulateSensitivitySimpleSteadyState(a)
+simpleopts.steadyState = true;
+[m, con, unused, opts] = simple_model(simpleopts);
+m = m.Update(rand(m.nk,1)+1);
+con = con.Update(rand(con.ns,1)+1, rand(con.nq,1)+1, rand(con.nh,1)+1);
+tGet = 1:6;
+
+verifySensitivity(a, m, con, tGet, opts)
+end
+
 function testSimulateSensitivitySimpleEvent(a)
 [m, con, unused, opts] = simple_model();
 m = m.Update(rand(m.nk,1)+1);
@@ -37,6 +47,25 @@ con = con.Update(rand(con.ns,1)+1, rand(con.nq,1)+1, rand(con.nh,1)+1);
 eve1 = eventDropsBelow(m, 10, 15);
 eve2 = eventDropsBelow(m, 1, 2);
 obs = observationEvents(6, [eve1;eve2]);
+
+verifySensitivityEvent(a, m, con, obs, opts)
+end
+
+function testSimulateSensitivityMichaelisMenten(a)
+[m, con, ~, opts] = michaelis_menten_model();
+m = m.Update(rand(m.nk,1)+m.k+1);
+con = con.Update(rand(con.ns,1)+con.s+1, rand(con.nq,1)+con.q+1, rand(con.nh,1)+con.h+1);
+tGet = 1:10;
+
+verifySensitivity(a, m, con, tGet, opts)
+end
+
+function testSimulateSensitivityMichaelisMentenEvent(a)
+[m, con, ~, opts, eve] = michaelis_menten_model();
+m = m.Update(rand(m.nk,1)+m.k+1);
+con = con.Update(rand(con.ns,1)+con.s+1, rand(con.nq,1)+con.q+1, rand(con.nh,1)+con.h+1);
+
+obs = observationEvents(10, eve);
 
 verifySensitivityEvent(a, m, con, obs, opts)
 end

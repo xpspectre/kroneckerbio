@@ -6,7 +6,7 @@ rng('default')
 fit = FitObject('T05b_Mixed_Effects_Fit');
 
 %% Construct equilibrium experiment A + B <-> C with seeds
-m = InitializeModel('Base');
+m = InitializeModelMassActionAmount('Base');
 
 m = AddCompartment(m, 'Solution', 3, 1);
 
@@ -25,7 +25,7 @@ m = AddOutput(m, 'C', 'C');
 m = AddParameter(m, 'kf', 5);
 m = AddParameter(m, 'kr', 3);
 
-m = AddReaction(m, '', '', 'A', 'B', 'C', '', 'kf', 'kr');
+m = AddReaction(m, 'r1', 'A', 'B', 'C', '', 'kf', 'kr');
 
 m = FinalizeModel(m);
 
@@ -77,7 +77,7 @@ opts.Verbose = 2;
 opts.TolOptim = 1;
 opts.MaxStepSize = 1;
 opts.Normalized = false;
-opts.UseAdjoint = false;
+opts.UseAdjoint = true;
 fitOut = FitObjective(fit, opts);
 
 %% Display fit results
@@ -98,7 +98,7 @@ for i = 1:nCon
 end
 % Plot fits
 for i = 1:nCon
-    plot(timesFine, simFits(i).y(timesFine,:)')
+    plot(timesFine, simFits(i).y(timesFine)')
     ax = gca;
     ax.ColorOrderIndex = 1;
 end

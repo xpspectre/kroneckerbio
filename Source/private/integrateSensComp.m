@@ -17,28 +17,17 @@ u = con.u;
 dudq = con.dudq;
 dydx = m.dydx;
 dydu = m.dydu;
+dydk = m.dydk;
+
+dkdT = sparse(find(opts.UseParams),1:nTk,1,m.nk,nT);
 
 % Construct system
 [der, jac, del] = constructSystem();
 
 if ~con.SteadyState
-    % Initial conditions [x0; vec(dxdT0)]
-    x0 = m.dx0ds * con.s + m.x0c;
-    
-    % Initial effect of rates on sensitivities is 0
-    dxdTk = zeros(nx, nTk); % Active rate parameters
-    
-    % Initial effect of seeds on states is dx0ds
-    dxdTs = m.dx0ds(:,opts.UseSeeds);
-    
-    % Initial effect of qs on sensitivities is 0
-    dxdTq = zeros(nx, nTq);
-    
-    % Initial effect of hs on sensitivities is 0
-    dxdTh = zeros(nx, nTh);
-
-    % Combine them into a vector
-    ic = [x0; vec([dxdTk, dxdTs, dxdTq, dxdTh])];
+    % Initial conditions
+    order = 1;
+    ic = extractICs(m,con,opts,order);
 else
     % Run to steady-state first
     ic = steadystateSens(m, con, opts);
@@ -50,6 +39,12 @@ sol = accumulateOdeFwdComp(der, jac, 0, tF, ic, con.Discontinuities, 1:nx, opts.
 % Work down
 int.Type = 'Integration.Sensitivity.Complex';
 int.Name = [m.Name ' in ' con.Name];
+
+int.x_names = vec({m.States.Name});
+int.u_names = vec({m.Inputs.Name});
+int.y_names = vec({m.Outputs.Name});
+int.k_names = vec({m.Parameters.Name});
+int.s_names = vec({m.Seeds.Name});
 
 int.nx = nx;
 int.ny = m.ny;
@@ -65,6 +60,7 @@ int.h = con.h;
 
 int.dydx = m.dydx;
 int.dydu = m.dydu;
+int.dydk = m.dydk;
 
 int.nT = nT;
 int.UseParams = opts.UseParams;
@@ -99,8 +95,9 @@ for it = 1:nte
 
     dyedx_i = dydx(int.te(it), int.xe(:,it), int.ue(:,it)); % y_x
     dyedu_i = dydu(int.te(it), int.xe(:,it), int.ue(:,it)); % y_u
+    dyedk_i = dydk(int.te(it), int.xe(:,it), int.ue(:,it)); % y_k
     dxedT_i = reshape(int.dxedT(:,it), nx,nT); % xT_ -> x_T
-    int.dyedT(:,it) = vec(dyedx_i * dxedT_i + dyedu_i * duedT_i); % y_x * x_T + y_u * u_T -> y_T -> yT_
+    int.dyedT(:,it) = vec(dyedx_i * dxedT_i + dyedu_i * duedT_i + dyedk_i * dkdT); % y_x * x_T + y_u * u_T * y_k * k_T -> y_T -> yT_
 end
 
 int.sol = sol;
@@ -125,7 +122,9 @@ int.sol = sol;
         dudq    = con.dudq;
         d       = con.d;
         dddh    = con.dddh;
-        dx0ds   = m.dx0ds;
+        dx0dd   = m.dx0ds;
+        x0      = m.x0;
+        nd      = m.ns;
         
         der = @derivative;
         jac = @jacobian;
@@ -161,9 +160,12 @@ int.sol = sol;
         
         % Dosing
         function val = delta(t, joint)
-            deltax = dx0ds * d(t);
+            d_i = d(t);
+            dx0dd_i = dx0dd(d_i);
             
-            ddeltaxdh = dx0ds * dddh(t);
+            deltax = x0(d_i) - x0(zeros(nd,1));
+            
+            ddeltaxdh = dx0dd_i * dddh(t);
             ddeltaxdT = [zeros(nx,nTk+nTs+nTq), ddeltaxdh(:,opts.UseDoseControls)];
             
             val = [deltax; vec(ddeltaxdT)];
@@ -216,7 +218,7 @@ int.sol = sol;
             u_i =  u(t(i)); % u_
             dxdT_i = reshape(deval(sol, t(i), dxdTStart:dxdTEnd), nx,nT); % xT_ -> x_T
             dudT_i = reshape(evaluate_input_sensitivity(t(i)), nu,nT); % uT_ -> u_T
-            val(:,i) = vec(dydx(t(i), x_i, u_i) * dxdT_i + dydu(t(i), x_i, u_i) * dudT_i); % y_x * x_T + y_u * u_T -> y_T -> yT_
+            val(:,i) = vec(dydx(t(i), x_i, u_i) * dxdT_i + dydu(t(i), x_i, u_i) * dudT_i + dydk(t(i), x_i, u_i) * dkdT); % y_x * x_T + y_u * u_T * y_k * k_T -> y_T -> yT_
         end
     end
 end

@@ -6,7 +6,7 @@ if nargin < 1
 end
 
 % Get function handles
-funnames = {'testBasicModel';'testNoStates';'testOneState';'testNoInputs';'testOneInput';'testNoOutputs';'testOneOutput';'testModelUpdate'};
+funnames = {'testBasicModel';'testNoStates';'testOneState';'testNoInputs';'testOneInput';'testNoOutputs';'testOneOutput';'testArbitraryOutput';'testModelUpdate'};
 if useMEX
     funnames = strcat(funnames,'MEX');
 end
@@ -119,6 +119,22 @@ function testOneOutput(a)
 useMEX = false;
 
 opts.Outputs = {'A+B'};
+
+[m,expectedexprs] = getModel(opts,useMEX);
+
+[funvals,expectedvals,funnames] = evaluateModel(m,expectedexprs);
+
+for vi = 1:length(funvals)
+    a.verifyEqual(full(funvals{vi}),expectedvals{vi},'AbsTol',1e-9,'RelTol',1e-6,[funnames{vi} ' differed from its expected value.']);  
+end
+
+end
+
+function testArbitraryOutput(a)
+
+useMEX = false;
+
+opts.Outputs = {'koff^kon*(A^2+sqrt(B))/(C*DD)'};
 
 [m,expectedexprs] = getModel(opts,useMEX);
 
@@ -270,6 +286,22 @@ end
 
 end
 
+function testArbitraryOutputMEX(a)
+
+useMEX = true;
+
+opts.Outputs = {'koff^kon*(A^2+sqrt(B))/(C*DD)'};
+
+[m,expectedexprs] = getModel(opts,useMEX);
+
+[funvals,expectedvals,funnames] = evaluateModel(m,expectedexprs);
+
+for vi = 1:length(funvals)
+    a.verifyEqual(full(funvals{vi}),expectedvals{vi},'AbsTol',1e-9,'RelTol',1e-6,[funnames{vi} ' differed from its expected value.']);  
+end
+
+end
+
 function testModelUpdateMEX(a)
 
 useMEX = true;
@@ -297,7 +329,7 @@ end
 
 %% Auxiliary functions
 
-function [m,expectedexprs] = getModel(opts,useMEX)
+function [m, expectedexprs] = getModel(opts,useMEX)
 
 if nargin < 2
     useMEX = false;
@@ -310,24 +342,23 @@ end
 clear mex
 
 % Get symbolic model
-[m,expectedexprs] = symbolicmodel(opts);
+[m, expectedexprs] = analytic_model_syms(opts);
 
 % Set up mex directory
 buildopts.UseMEX = useMEX;
-kroneckerdir = cd(cd([fileparts(which('symbolic2PseudoKronecker.m')) filesep '..']));
+kroneckerdir = cd(cd([fileparts(which('FinalizeModel.m')) filesep '..']));
 buildopts.MEXDirectory = fullfile(kroneckerdir,'Testing','mexfuns');
-
-% Build analytical model
-m = symbolic2PseudoKronecker(m,buildopts);
 
 % Compile MEX functions, if necessary
 if useMEX
+    warning('off','MATLAB:mex:GccVersion_link');
     compileMEXFunctions(buildopts.MEXDirectory,false)
+    warning('on', 'MATLAB:mex:GccVersion_link');
 end
 
 end
 
-function [funvals,expectedvals,funnames] = evaluateModel(m,expectedexprs,order)
+function [funvals, expectedvals, funnames] = evaluateModel(m, expectedexprs, order)
 
 if nargin < 3
     order = 2;
@@ -335,24 +366,36 @@ end
 
 % Get model function names
 if order == 2
-    funnames = setdiff(fieldnames(expectedexprs),{'x','u','k'});
+    funnames = setdiff(fieldnames(expectedexprs),{'x','u','k','s','x0','dx0ds','d2x0ds2'});
+    funnames = funnames(:);
+    funnames_x0 = {'x0';'dx0ds';'d2x0ds2'};
 elseif order == 1
-    funnames = {'f';'r';'y';'dfdx';'dfdk';'dfdu';'drdx';'drdk';'drdu';'dydx';'dydu'};
+    funnames = {'f';'r';'y';'dfdx';'dfdk';'dfdu';'drdx';'drdk';'drdu';'dydx';'dydu';'dydk'};
+    funnames_x0 = {'x0';'dx0ds'};
 elseif order == 0
     funnames = {'f';'r';'y'};
+    funnames_x0 = {'x0'};
 end
 
 % Get model function handles
 funlist = cellfun(@(fun)m.(fun),funnames,'UniformOutput',false);
+funlist_x0 = cellfun(@(fun)m.(fun),funnames_x0,'UniformOutput',false);
 
-% Get t, x, and u used in the tests
+% Get t, x, u, and s used in the tests
 t = 10; % doesn't matter what t is as long as f or r don't have t in their expressions
 x = expectedexprs.x;
 u = expectedexprs.u;
+s = expectedexprs.s;
 
 % Evaluate the functions
 evalfun = @(fun) fun(t,x,u);
 funvals = cellfun(evalfun,funlist,'UniformOutput',false);
+evalfun_x0 = @(fun) fun(s);
+funvals_x0 = cellfun(evalfun_x0,funlist_x0,'UniformOutput',false);
+
+% Concatenate f, r, y, and x0 functions
+funvals = [funvals; funvals_x0];
+funnames = [funnames; funnames_x0];
 
 % Rearrange the expected values in a cell array the same size as funvals
 expectedvals = cellfun(@(field)expectedexprs.(field),funnames,'UniformOutput',false);

@@ -3,7 +3,7 @@ clear; close all; clc
 rng('default')
 
 %% Construct equilibrium experiment A + B <-> C
-m = InitializeModel('Equilibrium');
+m = InitializeModelMassActionAmount('Equilibrium');
 
 m = AddCompartment(m, 'Solution', 3, 1);
 
@@ -18,7 +18,7 @@ m = AddOutput(m, 'C', 'C');
 m = AddParameter(m, 'kf', 5);
 m = AddParameter(m, 'kr', 3);
 
-m = AddReaction(m, '', '', 'A', 'B', 'C', '', 'kf', 'kr');
+m = AddReaction(m, '', 'A', 'B', 'C', '', 'kf', 'kr');
 
 m = FinalizeModel(m);
 

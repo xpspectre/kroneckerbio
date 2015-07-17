@@ -4,4 +4,8 @@ function str = cellstr2str(cellstr)
 cellstr = vec(cellstr);
 str = cellfun(@(x) [x ', '], cellstr, 'UniformOutput', false);
 str = cell2mat(str');
-str(end-1:end) = []; % trim off trailing ', '
+if isempty(str)
+    str = '';
+else
+    str(end-1:end) = []; % trim off trailing ', '
+end

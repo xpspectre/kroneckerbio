@@ -205,7 +205,9 @@ r = sym(r);
 y = sym(y);
 
 %% Perform rule substitutions
-% Note/TODO: zTargets substitution probably too permissive - lets anything be replaced, but backend won't handle this properly
+% Note/TODO: zTargets substitution probably too permissive:
+%   Lets anything be replaced, but backend won't handle this properly
+%   i.e., sub a seed into a reaction rate
 for i = 1:nRules
     zTargets{i} = name2id(zTargets{i}, allNames, allIDs, xuvNames);
     z{i} = name2id(z{i}, allNames, allIDs, xuvNames);
@@ -249,6 +251,15 @@ subExpr   = [sym(v); sym(k); x0; sym(u)];
 for i = 1:length(zTargetsIA);
     x0(IAInd(i)) = subs(zIA(i), subTarget, subExpr);
 end
+
+% Single replacement rules
+%   This rule type was added to facilitate NLME models' specification of etas
+%   Replace rate param with theta/errormodel
+zSSInds = strcmpi(zTypes, 'single substitution');
+zTargetsSS = zTargets(zSSInds);
+zSS        = z(zSSInds);
+r = subs(r, zTargetsSS, zSS);
+y = subs(y, zTargetsSS, zSS);
 
 %% Evaluate external functions
 if opts.EvaluateExternalFunctions

@@ -1,7 +1,8 @@
-function H = ObjectiveHessian(m, con, obj, opts)
+function [H, D, G] = ObjectiveHessian(varargin)
 %ObjectiveHessian Evaluate the hessian of a set of objective functions
 %
-%   D = ObjectiveHessian(m, con, obj, opts)
+%   [H, D, G] = ObjectiveHessian(FitObject, opts)
+%   [H, D, G] = ObjectiveHessian(m, con, obj, opts)
 %
 %   Inputs
 %   m: [ model struct scalar ]
@@ -55,12 +56,26 @@ function H = ObjectiveHessian(m, con, obj, opts)
 
 %% Work-up
 % Clean up inputs
-if nargin < 4
-    opts = [];
+switch nargin
+    case 1
+        fit = varargin{1};
+    case 2
+        fit = varargin{1};
+        opts = varargin{2};
+        fit.addOptions(opts);
+    otherwise % Old method
+        assert(nargin >= 3, 'KroneckerBio:ObjectiveHessian:TooFewInputs', 'ObjectiveValue requires at least 3 input arguments')
+        m = varargin{1};
+        con = varargin{2};
+        obj = varargin{3};
+        if nargin >= 4
+            opts = varargin{4};
+        else
+            opts = [];
+        end
+        assert(isscalar(m), 'KroneckerBio:ObjectiveHessian:MoreThanOneModel', 'The model structure must be scalar')
+        fit = FitObject.buildFitObject(m, con, obj, opts);
 end
-
-assert(nargin >= 3, 'KroneckerBio:ObjectiveGradient:TooFewInputs', 'ObjectiveGradient requires at least 3 input arguments')
-assert(isscalar(m), 'KroneckerBio:ObjectiveGradient:MoreThanOneModel', 'The model structure must be scalar')
 
 % Put into fit object
 fit = FitObject.buildFitObject(m, con, obj, opts);
@@ -69,7 +84,7 @@ fit = FitObject.buildFitObject(m, con, obj, opts);
 opts = fit.options;
 
 %% Run main calculation
-[~, ~, H] = fit.computeObjective;
+[G, D, H] = fit.computeObjective;
 
 %% Normalization
 if opts.Normalized
@@ -79,4 +94,6 @@ if opts.Normalized
     % Normalize
     H = spdiags(T,0,nT,nT) * H * spdiags(T,0,nT,nT);
     H = full(H); % Matlab bug makes this necessary
+    
+    D = D .* fit.collectParams;
 end

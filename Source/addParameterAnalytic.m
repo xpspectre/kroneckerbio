@@ -1,7 +1,7 @@
 function m = addParameterAnalytic(m, name, value, id)
 %addParameterAnalytic Add a rate parameter to a Model.Analytic
 %
-%   m = addParameterAnalytic(m, name, value)
+%   m = addParameterAnalytic(m, name, value, id)
 %
 %   Rate parameters determine the rate of reactions to which they are
 %   associated.

@@ -65,10 +65,10 @@ int.dydx = m.dydx;
 int.dydu = m.dydu;
 
 int.nT = nT;
-int.UseParams = opts.UseParams;
-int.UseSeeds = opts.UseSeeds;
+int.UseParams        = opts.UseParams;
+int.UseSeeds         = opts.UseSeeds;
 int.UseInputControls = opts.UseInputControls;
-int.UseDoseControls = opts.UseDoseControls;
+int.UseDoseControls  = opts.UseDoseControls;
 
 int.t = sol.x;
 int.x = sol.y(1:nx,:);

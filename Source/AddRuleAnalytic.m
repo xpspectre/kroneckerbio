@@ -14,6 +14,9 @@ function m = AddRuleAnalytic(m, name, target, expression, type, id)
 %       Type of rule, allowing:
 %           'repeated assignment': Affects rate expressions
 %           'initial assignment': Affects initial conditions
+%           'single substitution': Rate expression with only a single
+%           substitution - used for replacing an expression with another one
+%           containing itself
 %   id: [ string {random UUID}]
 %       A unique, valid variable name
 % Inputs:

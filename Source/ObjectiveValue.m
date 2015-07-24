@@ -1,6 +1,7 @@
-function G = ObjectiveValue(m, con, obj, opts)
+function G = ObjectiveValue(varargin)
 %ObjectiveValue Evaluate a set of objective functions
 %
+%   G = ObjectiveValue(FitObject, opts)
 %   G = ObjectiveValue(m, con, obj, opts)
 %   
 %   Inputs
@@ -56,15 +57,26 @@ function G = ObjectiveValue(m, con, obj, opts)
 
 %% Work-up
 % Clean up inputs
-assert(nargin >= 3, 'KroneckerBio:ObjectiveValue:TooFewInputs', 'ObjectiveValue requires at least 3 input arguments')
-if nargin < 4
-    opts = [];
+switch nargin
+    case 1
+        fit = varargin{1};
+    case 2
+        fit = varargin{1};
+        opts = varargin{2};
+        fit.addOptions(opts);
+    otherwise % Old method
+        assert(nargin >= 3, 'KroneckerBio:ObjectiveValue:TooFewInputs', 'ObjectiveValue requires at least 3 input arguments')
+        m = varargin{1};
+        con = varargin{2};
+        obj = varargin{3};
+        if nargin >= 4
+            opts = varargin{4};
+        else
+            opts = [];
+        end
+        assert(isscalar(m), 'KroneckerBio:ObjectiveValue:MoreThanOneModel', 'The model structure must be scalar')
+        fit = FitObject.buildFitObject(m, con, obj, opts);
 end
-
-assert(isscalar(m), 'KroneckerBio:ObjectiveValue:MoreThanOneModel', 'The model structure must be scalar')
-
-% Put into fit object
-fit = FitObject.buildFitObject(m, con, obj, opts);
 
 %% Run appropriate objective evaluation
 G = fit.computeObjective;

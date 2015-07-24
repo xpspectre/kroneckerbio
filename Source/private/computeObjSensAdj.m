@@ -58,6 +58,12 @@ int_sys = struct;
 int_sys.Type = 'Integration.System.Complex';
 int_sys.Name = [m.Name ' in ' con.Name];
 
+int_sys.x_names = vec({m.States.Name});
+int_sys.u_names = vec({m.Inputs.Name});
+int_sys.y_names = vec({m.Outputs.Name});
+int_sys.k_names = vec({m.Parameters.Name});
+int_sys.s_names = vec({m.Seeds.Name});
+
 int_sys.nx = nx;
 int_sys.ny = m.ny;
 int_sys.nu = m.nu;
@@ -73,6 +79,12 @@ int_sys.h = con.h;
 int_sys.dydx = m.dydx;
 int_sys.dydu = m.dydu;
 
+int_sys.nT = nT;
+int_sys.UseParams        = opts.UseParams;
+int_sys.UseSeeds         = opts.UseSeeds;
+int_sys.UseInputControls = opts.UseInputControls;
+int_sys.UseDoseControls  = opts.UseDoseControls;
+
 int_sys.t = sol_sys.x;
 int_sys.x = @(t)devals(sol_sys, t);
 int_sys.u = con.u;
@@ -85,9 +97,6 @@ int_sys.ue = u(int_sys.te);
 int_sys.ye = y(int_sys.te, int_sys.xe, int_sys.ue);
 
 int_sys.sol = sol_sys;
-
-int_sys.UseParams = opts.UseParams;
-int_sys.UseSeeds = opts.UseSeeds;
 
 % Distribute times for each observation
 int_sys = repmat(int_sys, nObj,1);
@@ -132,7 +141,6 @@ discrete_times = vec(unique([discrete_times_all{:}]));
 
 % Add to cumulative goal value
 G = G + G_cont + G_disc;
-
 
 %% Integrate Adjoint
 % Construct system

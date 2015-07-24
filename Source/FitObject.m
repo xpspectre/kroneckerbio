@@ -31,7 +31,7 @@ classdef FitObject < handle
        conditionNames = {}
        objectiveNames = {}
        nModels = 0
-       nConditions = 0;
+       nConditions = 0
        nObjectives = 0
        options
        componentMap = zeros(0,3) % nObjectives x 3 double matrix of [modelIdx, conditionIdx, objectiveIdx]; Note: when parts are turned into objects, get rid of this
@@ -270,6 +270,10 @@ classdef FitObject < handle
            %            of integration separately, with spec for different
            %            terms in regular integration, forward, and adjoint
            %            sensitivity calculations.
+           %        .ParamSpec [ n x 5 table with cols {Name, Type, LB, UB, Use} ]
+           %            Table specifying all parameter bounds and fit specs.
+           %            Alternative way of specifying fit spec by name in a nice
+           %            way.
            % Side Effects:
            %    Adds condition to fit object; updates component map. Annotates
            %    condition struct with:
@@ -320,7 +324,7 @@ classdef FitObject < handle
            % Default options
            opts_ = [];
            opts_.UseParams = ones(nk, 1); % fit all rate params, same in model class
-           opts_.UseSeeds = ones(ns, 1); % fit all seeds, same in model class
+           opts_.UseSeeds = zeros(ns, 1); % don't fit seeds
            opts_.UseInputControls = zeros(nq, 1); % don't fit input control params
            opts_.UseDoseControls = zeros(nh, 1); % don't fit dose control params
            
@@ -329,19 +333,59 @@ classdef FitObject < handle
            opts_.StartingInputControls = [];
            opts_.StartingDoseControls = [];
            
-           opts_.ParamLowerBound = 0;
-           opts_.ParamUpperBound = Inf;
-           opts_.SeedLowerBound = 0;
-           opts_.SeedUpperBound = Inf;
-           opts_.InputControlLowerBound = 0;
-           opts_.InputControlUpperBound = Inf;
-           opts_.DoseControlLowerBound = 0;
-           opts_.DoseControlUpperBound = Inf;
+           opts_.ParamLowerBound        = zeros(nk,1);
+           opts_.ParamUpperBound        = inf(nk,1);
+           opts_.SeedLowerBound         = zeros(ns,1);
+           opts_.SeedUpperBound         = inf(ns,1);
+           opts_.InputControlLowerBound = zeros(nq,1);
+           opts_.InputControlUpperBound = inf(nq,1);
+           opts_.DoseControlLowerBound  = zeros(nh,1);
+           opts_.DoseControlUpperBound  = inf(nh,1);
            
            opts_.RelTol = 1e-6;
            opts_.AbsTol = 1e-9;
            
+           opts_.ParamSpec = [];
+           
            opts = mergestruct(opts_, opts);
+           
+           % Convert opts.ParamSpec and populate corresponding fields
+           if ~isempty(opts.ParamSpec)
+               % Get param name lists to get indices from
+               kNames = {this.Models(condition.ParentModelIdx).Parameters.Name}';
+               sNames = {this.Models(condition.ParentModelIdx).Seeds.Name}';
+               
+               ps = opts.ParamSpec;
+               np = height(ps);
+               for i = 1:np
+                   p = ps(i,:);
+                   
+                   name = p.Name{1};
+                   type = p.Type{1};
+                   lb   = p.LB;
+                   ub   = p.UB;
+                   use  = p.Use;
+                   
+                   switch type
+                       case 'k'
+                           ind = find(ismember(kNames, name));
+                           opts.ParamLowerBound(ind) = lb;
+                           opts.ParamUpperBound(ind) = ub;
+                           opts.UseParams(ind) = use;
+                       case 's'
+                           ind = find(ismember(sNames, name));
+                           opts.SeedLowerBound(ind) = lb;
+                           opts.SeedUpperBound(ind) = ub;
+                           opts.UseSeeds(ind) = use;
+                       case 'q'
+                           error('Not implemented yet, or qNames not specified anywhere')
+                       case 'h'
+                           error('Not implemented yet, or hNames not specified anywhere')
+                       otherwise
+                           warning('FitObject:addCondition:invalidParamType', 'Param type %s in opts.ParamSpec not recognized. Skipping.', type)
+                   end
+               end
+           end
            
            % Validate bound and add to condition
            bounds = cell(2,4);
@@ -457,14 +501,12 @@ classdef FitObject < handle
            conditionsIdxs = find(ismember(this.conditionNames, parentConditions));
            nAddedConditions = length(conditionsIdxs);
            for i = 1:nAddedConditions
-               objective_ = objective;
-               
                % Annotate objective with weight
-               objective_.Weight = opts.Weight;
+               objective.Weight = opts.Weight;
                
                % Annotate objective with parent condition it's applied to
                parentConditionName = this.conditionNames{conditionsIdxs(i)};
-               objective_.ParentConditionName = parentConditionName;
+               objective.ParentConditionName = parentConditionName;
                
                % Sanity check: make sure output indices in objective map to actual
                % outputs in model (referenced thru condition)
@@ -472,18 +514,26 @@ classdef FitObject < handle
                parentModelIdx = ismember(this.modelNames, this.Conditions(parentConditionIdx).ParentModelName);
                parentModelName = this.Models(parentModelIdx).Name;
                outputNames = {this.Models(parentModelIdx).Outputs.Name};
-               try
-                   fitOutputs = outputNames(objective_.Outputs);
-               catch
-                   error('FitObject:addObjective: Invalid outputs entered')
+               if isnumeric(objective.Outputs)
+                   try
+                       fitOutputs = outputNames(objective.Outputs);
+                   catch
+                       error('FitObject:addObjective: Obj fun has outputs not in model')
+                   end
+               elseif iscell(objective.Outputs)
+                   assert(all(ismember(objective.Outputs, outputNames)), 'FitObject:addObjective: Obj fun has outputs not in model');
+                   fitOutputs = objective.Outputs;
+               elseif ischar(objective.Outputs)
+                   assert(ismember(objective.Outputs, outputNames), 'FitObject:addObjective: Obj fun has outputs not in model')
+                   fitOutputs = {objective.Outputs};
                end
                
                % Add objective to fit object
-               this.Objectives = [this.Objectives; objective_];
+               this.Objectives = [this.Objectives; objective];
                
                % If verbose, print brief description of outputs being fit.
                if this.options.Verbose >= 2
-                   fprintf('Added objective %s that fits outputs %s in condition %s in model %s\n', objective_.Name, cellstr2str(fitOutputs), parentConditionName, parentModelName)
+                   fprintf('Added objective %s that fits outputs %s in condition %s in model %s\n', objective.Name, cellstr2str(fitOutputs), parentConditionName, parentModelName)
                end
            end
            

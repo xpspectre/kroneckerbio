@@ -1,7 +1,7 @@
 function m = addCompartmentAnalytic(m, name, dimension, size, id)
 %AddCompartment Add a compartment to a Model.Analytic
 %
-%   m = AddCompartment(m, name, dimension, size)
+%   m = AddCompartment(m, name, dimension, size, id)
 %
 %   Compartments hold species and have size. The size affects the rates of
 %   bimolecular reactions.

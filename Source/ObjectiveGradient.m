@@ -1,7 +1,8 @@
-function D = ObjectiveGradient(m, con, obj, opts)
+function [D, G] = ObjectiveGradient(varargin)
 %ObjectiveGradient Evaluate the gradient of a set of objective functions
 %
-%   D = ObjectiveGradient(m, con, obj, opts)
+%   [D, G] = ObjectiveGradient(FitObject, opts)
+%   [D, G] = ObjectiveGradient(m, con, obj, opts)
 %
 %   Inputs
 %   m: [ model struct scalar ]
@@ -48,27 +49,40 @@ function D = ObjectiveGradient(m, con, obj, opts)
 %   Outputs
 %       D: [ real vector nT ]
 %           The sum of all objective function gradients
+%       G: [ real scalar ]
+%           The objective function value
 
 % (c) 2015 David R Hagen & Bruce Tidor
 % This work is released under the MIT license.
 
 %% Work-up
 % Clean up inputs
-if nargin < 4
-    opts = [];
+switch nargin
+    case 1
+        fit = varargin{1};
+    case 2
+        fit = varargin{1};
+        opts = varargin{2};
+        fit.addOptions(opts);
+    otherwise % Old method
+        assert(nargin >= 3, 'KroneckerBio:ObjectiveGradient:TooFewInputs', 'ObjectiveValue requires at least 3 input arguments')
+        m = varargin{1};
+        con = varargin{2};
+        obj = varargin{3};
+        if nargin >= 4
+            opts = varargin{4};
+        else
+            opts = [];
+        end
+        assert(isscalar(m), 'KroneckerBio:ObjectiveGradient:MoreThanOneModel', 'The model structure must be scalar')
+        fit = FitObject.buildFitObject(m, con, obj, opts);
 end
-
-assert(nargin >= 3, 'KroneckerBio:ObjectiveGradient:TooFewInputs', 'ObjectiveGradient requires at least 3 input arguments')
-assert(isscalar(m), 'KroneckerBio:ObjectiveGradient:MoreThanOneModel', 'The model structure must be scalar')
-
-% Put into fit object
-fit = FitObject.buildFitObject(m, con, obj, opts);
 
 % For convenience, copy fit object's options into this space
 opts = fit.options;
 
 %% Run main calculation
-[~, D] = fit.computeObjective;
+[G, D] = fit.computeObjective;
 
 %% Normalization
 if opts.Normalized

@@ -29,7 +29,7 @@ m = AddReaction(m, 'r1', 'A', 'B', 'C', '', 'kf', 'kr');
 
 m = FinalizeModel(m);
 
-fit.addModel(m)
+fit.addModel(m);
 
 %% Set up experimental conditions and generate some test data for multi-"participant" fitting
 tF = 1;

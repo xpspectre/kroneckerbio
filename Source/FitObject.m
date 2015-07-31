@@ -87,7 +87,7 @@ classdef FitObject < handle
            %      	.TerminalObj [ real scalar {-inf} ]
            %           Optimization is halted when this objective function value is
            %           reached
-           %       .MaxStepSize [ nonegative scalar {1} ]
+           %        .MaxStepSize [ nonegative scalar {1} ]
            %           Scalar fraction indicator of the maximum relative step size
            %           that any parameter can take in a single interation
            %     	.Algorithm [ string {active-set} ]
@@ -98,9 +98,14 @@ classdef FitObject < handle
            %     	.MaxFunEvals [ postive scalar integer {5000} ]
            %           Option for fmincon. Maximum number of objective function
            %           evaluations allowed before optimization will be terminated.
-           %       .GlobalOptimization [ logical scalar {false} ]
+           %        .ComputeSensPlusOne [ true | {false} ]
+           %            Whether to compute the (n+1)-th order sensitivity for an
+           %            n-th order calculation. Example: NLME requires 1st order
+           %            sensitivities (gradient) for the objective function calculation and
+           %            2nd order sensitivities (Hessian) for fitting.
+           %        .GlobalOptimization [ logical scalar {false} ]
            %           Use global optimization in addition to fmincon
-           %       .GlobalOpts [ options struct scalar {} ]
+           %        .GlobalOpts [ options struct scalar {} ]
            %           TODO: API in progress
            
            % Clean up inputs
@@ -132,6 +137,8 @@ classdef FitObject < handle
            opts_.Algorithm        = 'active-set';
            opts_.MaxIter          = 1000;
            opts_.MaxFunEvals      = 5000;
+           
+           opts_.ComputeSensPlusOne = false;
            
            opts_.GlobalOptimization = false;
            opts_.GlobalOpts         = [];
@@ -349,12 +356,14 @@ classdef FitObject < handle
            
            opts = mergestruct(opts_, opts);
            
+           % Parameter names for convenience
+           kNames = {this.Models(condition.ParentModelIdx).Parameters.Name}';
+           sNames = {this.Models(condition.ParentModelIdx).Seeds.Name}';
+           % TODO: names for input and dose control params?
+           
            % Convert opts.ParamSpec and populate corresponding fields
            if ~isempty(opts.ParamSpec)
                % Get param name lists to get indices from
-               kNames = {this.Models(condition.ParentModelIdx).Parameters.Name}';
-               sNames = {this.Models(condition.ParentModelIdx).Seeds.Name}';
-               
                ps = opts.ParamSpec;
                np = height(ps);
                for i = 1:np
@@ -420,10 +429,10 @@ classdef FitObject < handle
            hUse = logical(opts.UseDoseControls);
            
            if ~isempty(opts.StartingParams) && any(kUse)
-               kStart(kUse) = validateBounds(opts.StartingParams(kUse), bounds{1,1}(kUse), bounds{2,1}(kUse));
+               kStart(kUse) = validateBounds(opts.StartingParams(kUse), bounds{1,1}(kUse), bounds{2,1}(kUse), kNames(kUse));
            end
            if ~isempty(opts.StartingSeeds) && any(sUse)
-               sStart(sUse) = validateBounds(opts.StartingSeeds(sUse), bounds{1,2}(sUse), bounds{2,2}(sUse));
+               sStart(sUse) = validateBounds(opts.StartingSeeds(sUse), bounds{1,2}(sUse), bounds{2,2}(sUse), sNames(sUse));
            end
            if ~isempty(opts.StartingInputControls) && any(qUse)
                qStart(qUse) = validateBounds(opts.UseInputControls(qUse), bounds{1,3}(qUse), bounds{2,3}(qUse));
@@ -577,6 +586,31 @@ classdef FitObject < handle
                condition = this.Conditions(1);
            end
            
+           % Extract UseParams from ParamSpec, if present
+           if isfield(opts, 'ParamSpec')
+               
+               parentModelMask = ismember(this.modelNames, condition.ParentModelName);
+               if ~parentModelMask
+                   error('FitObject:addCondition: Condition parent model %s not present in fit object.', condition.ParentModelName)
+               end
+               kNames = {this.Models(parentModelMask).Parameters.Name}';
+               opts.UseParams = ones(length(kNames), 1); % default fit all params
+               
+               ps = opts.ParamSpec;
+               np = height(ps);
+               for i = 1:np
+                   p = ps(i,:);
+                   
+                   name = p.Name{1};
+                   type = p.Type{1};
+                   use  = p.Use;
+                   
+                   if strcmp(type, 'k')
+                       opts.UseParams(ismember(kNames, name)) = use;
+                   end
+               end
+           end
+           
            % Check if specified fit params match an existing model/condition; if
            % condition specifies different fit params for an existing model,
            % make a dummy model. Needed because models specify k inside them
@@ -678,6 +712,10 @@ classdef FitObject < handle
            %        Gradient w.r.t. all parameters in Theta for fmincon
            %    H [ nT x nT double matrix ]
            %        Hessian w.r.t. all parameters in Theta for fmincon
+           %
+           % Note: If this.options.ComputeSensPlusOne = true, Hessian w.r.t.
+           % parameters to be optimized on cannot be computed.
+           % TODO: Ability to use finite difference approximations if specified
            
            if nargout == 1
                
@@ -686,7 +724,11 @@ classdef FitObject < handle
                    modelIdx = this.Conditions(i).ParentModelIdx;
                    objectives = this.Objectives(this.componentMap(:,2) == i)';
                    
-                   Gs(i) = computeObj(this.Models(modelIdx), this.Conditions(i), objectives, this.options);
+                   if this.options.ComputeSensPlusOne
+                       Gs(i) = computeObjGrad(this.Models(modelIdx), this.Conditions(i), objectives, this.options);
+                   else
+                       Gs(i) = computeObj(this.Models(modelIdx), this.Conditions(i), objectives, this.options);
+                   end
                end
                G = sum(Gs);
                
@@ -700,7 +742,11 @@ classdef FitObject < handle
                    modelIdx = this.Conditions(i).ParentModelIdx;
                    objectives = this.Objectives(this.componentMap(:,2) == i)';
                    
-                   [Gi, Di] = computeObjGrad(this.Models(modelIdx), this.Conditions(i), objectives, this.options);
+                   if this.options.ComputeSensPlusOne
+                       [Gi, Di] = computeObjHess(this.Models(modelIdx), this.Conditions(i), objectives, this.options);
+                   else
+                       [Gi, Di] = computeObjGrad(this.Models(modelIdx), this.Conditions(i), objectives, this.options);
+                   end
                    
                    Gs(i) = Gi;
                    Ds(i) = Di;
@@ -710,7 +756,7 @@ classdef FitObject < handle
                
            end
            
-           if nargout == 3
+           if nargout == 3 % Normally not called during fitting
                
                Gs = zeros(this.nConditions,1);
                Ds = cell(this.nConditions,1);
@@ -719,7 +765,11 @@ classdef FitObject < handle
                    modelIdx = this.Conditions(i).ParentModelIdx;
                    objectives = this.Objectives(this.componentMap(:,2) == i)';
                    
-                   [Gi, Di, Hi] = computeObjHess(this.Models(modelIdx), this.Conditions(i), objectives, this.options);
+                   if this.options.ComputeSensPlusOne
+                       error('FitObject:computeObjective:tooHighSensOrder', 'ComputeSensPlusOne = true was specified for an obective Hessian calculation and 3rd order sensitivities are not implemented.')
+                   else
+                       [Gi, Di, Hi] = computeObjHess(this.Models(modelIdx), this.Conditions(i), objectives, this.options);
+                   end
                    
                    Gs(i) = Gi;
                    Ds(i) = Di;
@@ -1016,7 +1066,7 @@ switch nBounds
 end
 end
 
-function out = validateBounds(in, lb, ub)
+function out = validateBounds(in, lb, ub, names)
 % Check bounds on parameters: returning it if it satisfies them, setting equal to
 % appropriate bound if it falls outside and throwing warning. Accepts vectors of
 % in, lb, and ub. Throws error if input vectors' lengths don't match.
@@ -1027,9 +1077,16 @@ function out = validateBounds(in, lb, ub)
 %       Vector of lower bounds
 %   ub [ nx x 1 double vector ]
 %       Vector of upper bounds
+%   names [ nx x 1 cell vector of strings ]
+%       Optional names of parameters for useful warning/error messages
+%
 % Outputs:
 %   out [ nx x 1 double vector ]
 %       Vector of validated/floored+ceilinged parameters
+
+if nargin < 4
+    names = [];
+end
 
 % Make sure all inputs have the same dimension
 in = vec(in);
@@ -1038,18 +1095,40 @@ ub = vec(ub);
 nin = length(in);
 nlb = length(lb);
 nub = length(ub);
-assert(nin == nlb, 'FitObject:validateBounds: input param vector length %d and lower bounds length %d don''t match', nin, nlb);
-assert(nin == nub, 'FitObject:validateBounds: input param vector length %d and upper bounds length %d don''t match', nin, nub);
+assert(nin == nlb, 'FitObject:validateBounds:lbLengthMismatch', 'Fit param vector length %d and lower bounds length %d don''t match', nin, nlb);
+assert(nin == nub, 'FitObject:validateBounds:ubLengthMismatch', 'Fit param vector length %d and upper bounds length %d don''t match', nin, nub);
+if ~isempty(names)
+    nNames = length(names);
+    assert(nin == nNames, 'FitObject:validateBounds:nameLengthMismatch', 'Fit param vector length %d and names length %d don''t match', nin, nNames);
+end
 
 lMask = in < lb;
 if any(lMask)
-    warning('FitObject:validateBounds: input param below lower bound - setting to lower bound')
+    lInds = find(lMask);
+    for i = 1:numel(lInds)
+        lInd = lInds(i);
+        if isempty(names)
+            name = ['param ' num2str(lInd)];
+        else
+            name = names{lInd};
+        end
+        warning('FitObject:validateBounds: fit param %s = %d below lower bound = %d. Setting to lower bound', name, in(lInd), lb(lInd))
+    end
 end
 in(lMask) = lb(lMask);
 
 uMask = in > ub;
 if any(uMask)
-    warning('FitObject:validateBounds: input param above upper bound - setting to upper bound')
+    uInds = find(uMask);
+    for i = 1:numel(uInds)
+        uInd = uInds(i);
+        if isempty(names)
+            name = ['param ' num2str(uInd)];
+        else
+            name = names{uInd};
+        end
+        warning('FitObject:validateBounds: fit param %s = %d above upper bound = %d. Setting to upper bound', name, in(uInd), ub(uInd))
+    end
 end
 in(uMask) = ub(uMask);
 

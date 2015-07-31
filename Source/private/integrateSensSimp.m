@@ -63,6 +63,7 @@ int.h = con.h;
 
 int.dydx = m.dydx;
 int.dydu = m.dydu;
+int.dydk = m.dydk;
 
 int.nT = nT;
 int.UseParams        = opts.UseParams;

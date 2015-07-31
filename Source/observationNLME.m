@@ -83,8 +83,8 @@ obj.Type = 'Objective.Data.NLME';
 obj.Continuous = false;
 
 obj.G      = @G;
-obj.dGdy   = @dGdy;
-obj.d2Gdy2 = @d2Gdy2;
+obj.dGdk   = @dGdk;
+obj.d2Gdk2 = @d2Gdk2;
 
 obj.p    = @p;
 obj.logp = @logp;
@@ -127,14 +127,14 @@ obj = pastestruct(objectiveZero(), obj);
         discrete = discrete_times;
     end
 
-    function val = dGdy(t, int)
-        warning('Analytic derivative for NLME dGdy not implemented yet. Derive and implement it or approximate with finite differences.')
-        val = zeros(int.ny, 1);
+    function val = dGdk(int)
+        warning('Analytic derivative for NLME dGdk not implemented yet. Derive and implement it or approximate with finite differences.')
+        val = zeros(int.nk, 1);
     end
 
-    function val = d2Gdy2(t, int)
-        warning('Analytic derivative for NLME dGdy not implemented yet. Derive and implement it or approximate with finite differences.')
-        val = zeros(int.ny, int.ny);
+    function val = d2Gdk2(int)
+        warning('Analytic derivative for NLME d2Gdk2 not implemented yet. Derive and implement it or approximate with finite differences.')
+        val = zeros(int.nk, int.nk);
     end
 
 

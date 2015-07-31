@@ -33,7 +33,7 @@ function m = finalizeModelAnalytic(m, opts)
 %           If .UseMEX is set to TRUE, the string provided here sets the
 %           directory to which the .mex files will be written. If .UseMEX
 %           is FALSE, this option is ignored.
-%       .EvaluateExternalFunctions [ logical scalar {false} ]
+%       .EvaluateExternalFunctions [ true | {false} ]
 %           Determines whether to evaluate calls to external functions in
 %           the reaction rate expressions. The external functions are
 %           evaluated with symbolic input arguments to obtain a symbolic
@@ -42,6 +42,12 @@ function m = finalizeModelAnalytic(m, opts)
 %           computed. Note: required to evaluate exponents written usen the pow
 %           function. Try setting this to true if pow functions aren't
 %           recognized in final symbolic expressions and function handles.
+%       .nan2zero [ true | {false} ]
+%           Whether to write out function handles with nan2zero applied.
+%           nan2zero can be used to fix functions with removable singularities
+%           that -> 0. Example: rate form with Hill function where order n can
+%           vary. Warning: gives incorrect results if other types of
+%           singularities are present or removable singularity doesn't -> 0.
 %
 %   Outputs
 %   m: [ Model.Analytic ]
@@ -65,7 +71,8 @@ opts_.VolumeToParameter         = false;
 opts_.Verbose                   = 0;
 opts_.UseMEX                    = false;
 opts_.MEXDirectory              = defaultMEXdirectory;
-opts_.EvaluateExternalFunctions = false; % needed for calls to power() and other functions
+opts_.EvaluateExternalFunctions = false;
+opts_.nan2zero                  = false;
 
 opts = mergestruct(opts_, opts);
 
@@ -1114,7 +1121,7 @@ if verbose; fprintf('done.\n'); end
             case 'efficient'
                 
                 string_rep = symbolic2string(dsym, num, dens);
-                fun = string2fun(string_rep, num, dens);
+                fun = string2fun(string_rep, num, dens, opts.nan2zero);
                 
             case 'mex'
 
@@ -1122,7 +1129,7 @@ if verbose; fprintf('done.\n'); end
                 % aren't called very many times
                 if strcmp(num,'x')
                     string_rep = symbolic2string(dsym, num, dens);
-                    fun = string2fun(string_rep, num, dens);
+                    fun = string2fun(string_rep, num, dens, opts.nan2zero);
                     return
                 end
                 
@@ -1325,10 +1332,14 @@ if verbose; fprintf('done.\n'); end
 
 end
 
-function fun = string2fun(string_rep, num, dens)
+function fun = string2fun(string_rep, num, dens, nan2zero)
 % Note that string2fun is a subfunction instead of a nested function to
 % prevent the anonymous functions created here from saving copies of
 % the primary function workspace variables.
+
+if nargin < 4
+    nan2zero = false;
+end
 
 % If the dependent variable is x0, the input argument is s. Otherwise,
 % t,x,u,k.
@@ -1346,8 +1357,14 @@ else
     sparsestr = {'sparse(' ')'};
 end
 
+if nan2zero
+    n2z = {'nan2zero(', ')'};
+else
+    n2z = {'', ''};
+end
+
 % Set up the function handle
-fun = eval(['@(' inputargstr ') ' sparsestr{1} string_rep sparsestr{2}]);
+fun = eval(['@(' inputargstr ') ' n2z{1} sparsestr{1} string_rep sparsestr{2} n2z{2}]);
 
 % Convert function to and from function handle to ensure that
 % MATLAB recognizes and stores the workspace for the anonymous

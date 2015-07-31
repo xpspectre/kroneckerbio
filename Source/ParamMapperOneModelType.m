@@ -36,12 +36,13 @@ classdef ParamMapperOneModelType < ParamMapper
            % Tests whether condition's UseParams matches an existing one -
            % used by addModelOnUniqueParam to determine whether a new model
            % needs to be created. Implicitly requires that all models be the
-           % same type
+           % same type.
            sharedIdx = 0;
            nCon = size(this.paramsShared, 1);
            for i = 1:nCon
                if all(UseParams == this.paramsShared{i,1});
                    sharedIdx = i;
+                   return
                end
            end
        end

@@ -13,7 +13,8 @@ nIds = height(theoph);
 %% Load model
 % Model contains nominal dose of 320 mg
 m = theo_model();
-% load('theo_model.mat') % preload model for speed after building
+save('theo_model.mat', 'm');
+% load('theo_model.mat');
 
 fit.addModel(m);
 
@@ -37,9 +38,9 @@ for i = 1:nIds
     % Specify table of parameter, condition, and fitting options
     Name = {'ka', 'kel', 'V'}';
     Type = {'k',  'k',   'k'}';
-    LB   = [0,    0,     0]';
-    UB   = [3     0.3    50]';
-    Use  = [1     1      1]';
+    LB   = [ 0,    0,     0 ]';
+    UB   = [ 3,    0.3,   50]';
+    Use  = [ 1,    1,     1 ]';
     
     opts = [];
     opts.ParamSpec = table(Name, Type, LB, UB, Use);
@@ -67,12 +68,12 @@ end
 
 %% Setup fit
 opts.Verbose = 2;
+opts.ComputeSensPlusOne = true; % NLME require (n+1)-th order sensitivities
 opts.Normalized = false; % Simple system has bounded params w/ known ranges
-opts.UseAdjoint = false; % can't use adjoint (for now) since dy/dT sensitivities not calculated
+opts.UseAdjoint = false; % Can't use adjoint (for now) since dy/dT sensitivities not calculated
 
 %% Test objective value
-% G = ObjectiveValue(fit, opts); % doesn't work because NLME requires gradients even for G calculation
-[~, G] = ObjectiveGradient(fit, opts); % will get 33 warnings: 3 patients, 11 timepoints each
+G = ObjectiveValue(fit, opts);
 
 %% Fit
 fitOut = FitObjective(fit, opts);

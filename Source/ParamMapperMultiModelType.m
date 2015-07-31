@@ -49,6 +49,7 @@ classdef ParamMapperMultiModelType < ParamMapper
                end
                if all(UseParams == this.paramsShared{i,1});
                    sharedIdx = i;
+                   return
                end
            end
        end

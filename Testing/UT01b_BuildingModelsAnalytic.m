@@ -81,3 +81,13 @@ a.verifyEqual(m.nx, 2)
 a.verifyEqual(m.ny, 3)
 
 end
+
+function testStateSpaceEqModelBuilding(a)
+% Mostly just tests if this runs to completion for now
+% Should prefer to test interface rather than presence/absence of r and S
+m = theo_model_statespace;
+
+a.verifyEqual(m.nx, 2)
+a.verifyEqual(m.f(0,[10,10],[]), [-15.0; 13.5])
+
+end

@@ -128,12 +128,15 @@ obj = pastestruct(objectiveZero(), obj);
     end
 
     function val = dGdk(int)
-        warning('Analytic derivative for NLME dGdk not implemented yet. Derive and implement it or approximate with finite differences.')
+        % Note: called with ComputeSensPlusOne = true when calculating G, but
+        %   not needed. In later version, decide what to call in here according to
+        %   the derivatives in int.
+%         warning('Analytic derivative for NLME dGdk not implemented yet. Derive and implement it or approximate with finite differences.')
         val = zeros(int.nk, 1);
     end
 
     function val = d2Gdk2(int)
-        warning('Analytic derivative for NLME d2Gdk2 not implemented yet. Derive and implement it or approximate with finite differences.')
+%         warning('Analytic derivative for NLME d2Gdk2 not implemented yet. Derive and implement it or approximate with finite differences.')
         val = zeros(int.nk, int.nk);
     end
 

@@ -134,11 +134,49 @@ nu      = numel(u);
 [~, vuInd] = ismember(uvNames, vNames);
 
 % Reactions
-rprovided = true;
 m.Reactions = combineComponents(m.Reactions, m.add.Reactions, opts.Verbose);
 rNames = {m.Reactions.Name}';
 r = {m.Reactions.Rate}';
 nr = numel(r);
+
+% Rules
+m.Rules = combineComponents(m.Rules, m.add.Rules, opts.Verbose);
+zStrs    = {m.Rules.ID}';
+zSyms    = sym(zStrs);
+zNames   = {m.Rules.Name}';
+z        = {m.Rules.Expression}';
+zTargets = {m.Rules.Target}';
+zTypes   = {m.Rules.Type}';
+nRules   = numel(z); % nz clashes with another variable below
+
+% Determine whether reactions are provided or RHS f is directly provided
+% Initialize f from rules that specify state space eqs
+if any(strcmp(zTypes, 'state space eq'))
+    assert(nr == 0, 'finalizeModelAnalytic:fAndRxnsBothSpecified', 'Found both state space equations and reactions specified in the same model')
+    rprovided = false;
+    
+    zSSEInds = strcmpi(zTypes, 'state space eq');
+    ddt      = zTargets(zSSEInds);
+    f0       = z(zSSEInds);
+    
+    % Make sure each state space eq has a corresponding state and vice versa
+    assert(length(ddt) == nx, 'finalizeModelAnalytic:fMissing', 'Number of state space equations %d not equal to number of states %d', length(ddt), nx)
+    
+    % Make ODE RHS with same order as states
+    f = cell(nx,1);
+    for i = 1:nx
+        ddtID = name2id(ddt{i}, xNames, xStrs, xvNames);
+        [~, ind] = ismember(ddtID, xStrs);
+        if ind == 0
+            error('finalizeModelAnalytic:xMissing', 'State space equation LHS dxdt refers to state %s not recognized', ddt{i});
+        end
+        f(ind) = f0(i);
+    end
+    
+    % Make sure rows of f correspond to rows of stoichiometry matrix
+else
+    rprovided = true;
+end
 
 % Outputs
 m.Outputs = combineComponents(m.Outputs, m.add.Outputs, opts.Verbose);
@@ -155,16 +193,6 @@ if ny == 0
     yNames = cell(0,1);
     y      = cell(0,1);
 end
-
-% Rules
-m.Rules = combineComponents(m.Rules, m.add.Rules, opts.Verbose);
-zStrs    = {m.Rules.ID}';
-zSyms    = sym(zStrs);
-zNames   = {m.Rules.Name}';
-z        = {m.Rules.Expression}';
-zTargets = {m.Rules.Target}';
-zTypes   = {m.Rules.Type}';
-nRules   = numel(z); % nz clashes with another variable below
 
 % Useful combinations of names and IDs
 outputNames = [xNames; uNames; vNames; kNames];
@@ -195,21 +223,65 @@ m.add.nz = 0;
 for i = 1:nx
     x0{i} = name2id(x0{i}, sNames, sStrs);
 end
-
-% Reaction rates - arbitrary expressions of anything
-for i = 1:nr
-    r{i} = name2id(r{i}, allNames, allIDs, xuvNames);
-end
+x0 = sym(x0);
 
 % Outputs - arbitrary expressions of states and parameters
 for i = 1:ny
     y{i} = name2id(y{i}, outputNames, outputIDs, xuvNames);
 end
-
-% Convert to symbolics
-x0 = sym(x0);
-r = sym(r);
 y = sym(y);
+
+% Reaction rates - arbitrary expressions of anything
+if rprovided
+    for i = 1:nr
+        r{i} = name2id(r{i}, allNames, allIDs, xuvNames);
+    end
+else % f provided
+    for i = 1:nx
+        f{i} = name2id(f{i}, allNames, allIDs, xuvNames);
+    end
+    f = sym(f);
+end
+r = sym(r);
+
+%% Process stoichiometry and rate forms/RHS's
+% Make stoichiometry matrix nSpecies x nReactions
+if rprovided
+    xuFullNames = strcat([xvNames; uvNames], '.', [xNames; uNames]);
+    SEntries = zeros(0,3);
+    for i = 1:nr
+        for j = 1:length(m.Reactions(i).Reactants)
+            if ~isempty(m.Reactions(i).Reactants{j})
+                [~, ind] = ismember(m.Reactions(i).Reactants{j}, xuFullNames);
+                SEntries = [SEntries; ind, i, -1];
+            end
+        end
+        for j = 1:length(m.Reactions(i).Products)
+            if ~isempty(m.Reactions(i).Products{j})
+                [~, ind] = ismember(m.Reactions(i).Products{j}, xuFullNames);
+                SEntries = [SEntries; ind, i, 1];
+            end
+        end
+    end
+    S = sparse(SEntries(:,1), SEntries(:,2), SEntries(:,3), nx+nu, nr);
+    Su = S(nx+1:end,:);
+    S = S(1:nx,:);
+    
+    StoichiometricMatrix = S;
+    
+    StoichiometricSym = initSsym(StoichiometricMatrix);
+    f = StoichiometricSym*r;
+else % NOTE: make sure setting this blank is ok - it's needed later
+    StoichiometricMatrix = [];
+end
+
+    function StoichiometricSym = initSsym(StoichiometricMatrix)
+        Sind = find(StoichiometricMatrix(:) ~= 0);
+        [Si,Sj] = ind2sub(size(StoichiometricMatrix),Sind);
+        Ssize = size(StoichiometricMatrix);
+        Ss = StoichiometricMatrix(Sind);
+        StoichiometricSym = initializeMatrixMupad(Si,Sj,Ss,Ssize(1),Ssize(2));
+    end
 
 %% Perform rule substitutions
 % Note/TODO: zTargets substitution probably too permissive:
@@ -229,6 +301,7 @@ zTargetsRA = zTargets(zRAInds);
 zRA        = z(zRAInds);
 for i = 1:length(zTargetsRA)
     r = subs(r, zTargetsRA, zRA);
+    f = subs(f, zTargetsRA, zRA);
 end
 
 % Repeated assignment subs in initial assignment rules
@@ -266,47 +339,14 @@ zSSInds = strcmpi(zTypes, 'single substitution');
 zTargetsSS = zTargets(zSSInds);
 zSS        = z(zSSInds);
 r = subs(r, zTargetsSS, zSS);
+f = subs(f, zTargetsSS, zSS);
 y = subs(y, zTargetsSS, zSS);
 
 %% Evaluate external functions
 if opts.EvaluateExternalFunctions
-    r = evaluateExternalFunctions(r, [vStrs; xStrs; uStrs; kStrs]);
+    r = evaluateExternalFunctions(r, outputIDs);
+    f = evaluateExternalFunctions(f, outputIDs);
 end
-
-%% Process stoichiometry and rate forms/RHS's
-% Make stoichiometry matrix nSpecies x nReactions
-xuFullNames = strcat([xvNames; uvNames], '.', [xNames; uNames]);
-SEntries = zeros(0,3);
-for i = 1:nr
-    for j = 1:length(m.Reactions(i).Reactants)
-        if ~isempty(m.Reactions(i).Reactants{j})
-            [~, ind] = ismember(m.Reactions(i).Reactants{j}, xuFullNames);
-            SEntries = [SEntries; ind, i, -1];
-        end
-    end
-    for j = 1:length(m.Reactions(i).Products)
-        if ~isempty(m.Reactions(i).Products{j})
-            [~, ind] = ismember(m.Reactions(i).Products{j}, xuFullNames);
-            SEntries = [SEntries; ind, i, 1];
-        end
-    end
-end
-S = sparse(SEntries(:,1), SEntries(:,2), SEntries(:,3), nx+nu, nr);
-Su = S(nx+1:end,:);
-S = S(1:nx,:);
-
-StoichiometricMatrix = S;
-
-StoichiometricSym = initSsym(StoichiometricMatrix);
-f = StoichiometricSym*r;
-
-    function StoichiometricSym = initSsym(StoichiometricMatrix)
-        Sind = find(StoichiometricMatrix(:) ~= 0);
-        [Si,Sj] = ind2sub(size(StoichiometricMatrix),Sind);
-        Ssize = size(StoichiometricMatrix);
-        Ss = StoichiometricMatrix(Sind);
-        StoichiometricSym = initializeMatrixMupad(Si,Sj,Ss,Ssize(1),Ssize(2));
-    end
 
 %% Convert compartment volumes to parameters or constants
 if opts.VolumeToParameter
@@ -898,6 +938,7 @@ if verbose; fprintf('   ...done.\n'); end
 %% Set up model structure
 
 % Clear unnecessary variables from scope
+%   Removes warnings when finalized models are loaded into sessions w/o the symbolic toolbox
 clear SymModel vSyms kSyms sSyms qSyms xuSyms xSyms uSyms ...
     vStrs kStrs sStrs qStrs xuStrs xStrs uStrs ...
     xNamesFull uNamesFull vxNames vuNames ...
@@ -906,8 +947,10 @@ clear SymModel vSyms kSyms sSyms qSyms xuSyms xSyms uSyms ...
     addlength currentLength iExpr ind match nAdd nExpr uAddInd sys_string ...
     i iv ik is iq iu ix ir iy ...
     rstates rinputs rparams statesubs inputsubs paramssubs rstatesi rinputsi rparamsi...
-    uqi qsinui nz sizes symbolic2stringmethod...
-    thistime defaultMEXdirectory
+    uqi qsinui nz sizes symbolic2stringmethod ...
+    thistime defaultMEXdirectory ...
+    StoichiometricSym subExpr subTarget ySyms ...
+    z zIA zRA zSS zSyms zTargets zTargetsIA zTargetsRA zTargetsSS
 
 m.nv = nv;
 m.nk = nk;

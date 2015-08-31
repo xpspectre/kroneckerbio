@@ -73,6 +73,18 @@ opts = fit.options;
 verbose = logical(opts.Verbose);
 opts.Verbose = max(opts.Verbose-1,0);
 
+% Ensure allowed optimization algorithm is selected
+method = opts.Method;
+switch method
+    case 'fmincon'
+        % do nothing
+    case 'spsa'
+        % Set SPSA-specific options
+        spsaOpts = [];
+    otherwise
+        error('FitObjective:invalidMethod', 'Invalid optimization method %s selected.', method)
+end
+
 % Ensure Restart is a positive integer
 if ~(opts.Restart >= 0)
     opts.Restart = 0;
@@ -192,9 +204,13 @@ for iRestart = 1:opts.Restart+1
         [~, D] = objective(That); % since global solvers don't return gradient at endpoint
         
     else
-        
-        if opts.Verbose; fprintf('Beginning gradient descent...\n'); end
-        [That, G, exitflag, ~, ~, D] = fmincon(localProblem);
+        if strcmp(opts.Method, 'fmincon')
+            if opts.Verbose; fprintf('Beginning gradient descent...\n'); end
+            [That, G, exitflag, ~, ~, D] = fmincon(localProblem);
+        elseif strcmp(opts.Method, 'spsa')
+            if opts.Verbose; fprintf('Beginning SPSA gradient descent...\n'); end
+            [That, G, exitflag, ~, ~, D] = spsamincon(localProblem, spsaOpts);
+        end
         
     end
     
@@ -311,7 +327,7 @@ end
 %%%%% Halt optimization on terminal goal %%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     function stop = isTerminalObj(x, optimValues, state)
-        if optimValues.fval  < opts.TerminalObj
+        if optimValues.fval < opts.TerminalObj
             aborted = true;
             Tabort = x;
             stop = true;

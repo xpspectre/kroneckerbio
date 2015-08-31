@@ -1,32 +1,21 @@
-% NONMEM-like mixed effects modeling
+% S-like nonlinear mixed effects fitting using builtin nlmefit and nlmefitsa
 clear; close all; clc
 rng('default');
 
 %% Initialize Fit Object
-fit = FitObject('T05d_NLME_Fit');
+fit = FitObject('T05e_Builtin_NLME_Fit');
 
 %% Load data
 theoph = load_theo();
 
-% Visualize dataset
-nIds = height(theoph);
-figure
-hold on
-for i = 1:nIds
-    plot(theoph.Time{i}, theoph.Conc{i})
-end
-hold off
-xlabel('Time')
-ylabel('Conc')
-
-% Testing: subset of patients for now
-nIds = 3;
+% nIds = height(theoph);
+nIds = 3; % subset of patients for now
 
 %% Load model
 % Model contains nominal dose of 320 mg
-m = theo_model();
-save('theo_model.mat', 'm');
-% load('theo_model.mat');
+m = theo_model_builtin();
+% save('theo_model_builtin.mat', 'm');
+load('theo_model_builtin.mat');
 
 fit.addModel(m);
 
@@ -44,8 +33,7 @@ for i = 1:nIds
     con = experimentInitialValue(m, [dose; 0], [], [], ['TheoCon' num2str(i)]); % modified ICs
     
     % Specify objective function
-    obs = observationNLME('Cp', times, method, ['TheoObs' num2str(i)]);
-    obj = obs.Objective(concs);
+    obj = objectiveNLME('Cp', times, concs, ['TheoObj' num2str(i)]);
     
     % Specify table of parameter, condition, and fitting options
     Name = {'ka', 'kel', 'V'}';
@@ -79,14 +67,15 @@ end
 % hold off
 
 %% Setup fit
-opts.Verbose = 1;
-opts.ComputeSensPlusOne = true; % NLME require (n+1)-th order sensitivities; Note: calls computeObjGrad, which will try to compute dGdk as well, which isn't needed
-opts.Normalized = false; % Simple system has bounded params w/ known ranges
-opts.UseAdjoint = false; % Can't use adjoint (for now) since dy/dT sensitivities not calculated
-% opts.Method = 'spsa'; % Alternative SPSA optimizer
-
-%% Test objective value
-G = ObjectiveValue(fit, opts);
+opts = [];
+opts.Verbose = 2;
+% opts.method = 'LME';
+opts.method = 'SAEM';
+opts.etas = {'ka', 'kel', 'V'};
+% opts.ParamTransform = [1 1 1];
+opts.ErrorModel = 'combined';
 
 %% Fit
-fitOut = FitObjective(fit, opts);
+[fitOut, beta, psi, stats] = FitNLME(fit, opts);
+
+%% Analyze results

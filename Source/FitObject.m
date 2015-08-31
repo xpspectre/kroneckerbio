@@ -140,6 +140,8 @@ classdef FitObject < handle
            
            opts_.ComputeSensPlusOne = false;
            
+           opts_.Method           = 'fmincon';
+           
            opts_.GlobalOptimization = false;
            opts_.GlobalOpts         = [];
            

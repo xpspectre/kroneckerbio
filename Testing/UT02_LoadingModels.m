@@ -82,7 +82,7 @@ m = FinalizeModel(m);
 verifyDerivatives(a, m);
 end
 
-function testSimpleMassActionAsAnalyticSBMLLoading(a)
+function testSimpleMassActionAsAnalyticSBMLoading(a)
 opts = [];
 opts.EvaluateExternalFunctions = true; % simple_massaction has x^2 terms, and power needs to be evaluated
 m = LoadModelSbmlAnalytic('simple_massaction.xml');
@@ -91,7 +91,7 @@ m = FinalizeModel(m, opts);
 verifyDerivatives(a, m);
 end
 
-function testSimpleMassActionSimBiologyLLoading(a)
+function testSimpleMassActionSimBiologyLoading(a)
 load('simple_massaction_simbio_model.mat')
 m = LoadModelSimBioMassAction(simbiomodel);
 m = FinalizeModel(m);

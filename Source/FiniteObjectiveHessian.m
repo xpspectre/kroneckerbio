@@ -1,136 +1,90 @@
-function [H, All] = FiniteObjectiveHessian(m, con, obj, opts)
-%FiniteObjectiveHessian Compute the hessian of an objective function by
-%   the finite difference approximation
+function [H, D, G] = FiniteObjectiveHessian(varargin)
+%ObjectiveHessian Evaluate the hessian of a set of objective functions by finite
+%   difference approximation
 %
-%   Mathematically: H = dG/dp2 or H = dG/dlnp2
+%   This function accepts a FitObject + options or separate model, experimental
+%   condition(s), and objective function(s) + options.
 %
-%   [H, All] = FiniteObjectiveHessian(m, con, obj, opts)
+%   [H, D, G] = ObjectiveHessian(FitObject, opts)
+%   [H, D, G] = ObjectiveHessian(m, con, obj, opts)
 %
-%   Inputs:
-%       m    - The KroneckerBio model that will be simulated
-%       con  - A structure vector of the experimental conditions under
-%              which the hessian will be evaluated
-%       obj  - A structure array of the objective functions under which the
-%              hessian will be evaluated. Each row of obj is matched to the
-%              corresponding entry in con
-%       opts - Optional function options
-%           .useParams   - Vector of indexes indicating the rate constants
-%                          whose sensitivities will be considered
-%           .useICs      - Vector of indexes indicating the initial
-%                          concentrations whose sensitivities will be
-%                          considered
-%           .UseModelICs - Boolean that determines whether to use the
-%                          initial concentrations of the model or the
-%                          conditions. Default = true
-%           .Normalized  - Boolean that determines if the simple hessian or
-%                          the normalized hessian will be computed. The
-%                          normalized hessian is normalized with respect to
-%                          the values of the parameters. Default = true
-%           .ComplexStep - Scalar boolean. If set to true, use an
-%                           imaginary finite difference step. This has the
-%                           advantage of not requiring the subtraction of
-%                           two large numbers, increasing the stability of
-%                           the result, but comes at the cost of larger
-%                           computational cost from evaluating expressions
-%                           with complex numbers. If set to false (the
-%                           default), a real finite difference step is
-%                           used.
-%           .Verbose     - Print progress to command window
-%   Outputs:
-%       H = FiniteObjectiveHessian(m, con, obj, ...)
-%           H - The hessian as an array
+%   This function is identical to ObjectiveHessian except that the
+%   gradient is calculated differently. This is useful for testing that
+%   custom-made objective functions have been coded correctly and that
+%   integration tolerances have been set appropriately.
 %
-%       [H, All] = FiniteObjectiveHessian(m, con, obj, ...)
-%           All - The hessian is the sum of hessians from all experiements,
-%           but All returns the hessians in a size(obj) cell array
+% Inputs:
+%   FitObject [ scalar FitObject ]
+%       Fitting scheme
+%   m [ scalar model struct ]
+%       The KroneckerBio model that will be simulated
+%   con [ nCon x 1 conditions struct vector ]
+%       The experimental conditions under which the model will be simulated. A
+%       nCon x 1 struct vector is allowed.
+%   obj [ nCon x nObj objectives struct matrix ]
+%       The objective functions under which the experiments will be simulated.
+%       Each row of obj has a corresponding row of con.
+%   opts [ options struct ]
+%       Options struct allowing the following fields, overriding existing values
+%       in m, con, and obj. See FitObject.buildFitObject opts for allowed
+%       fields.
 %
-%   Additional info:
-%   - The experimental condition vector can also be a cell vector
-%   - The objective function array can also be a cell array. Empty entries 
-%   in the cell array and entries in the structure array with empty
-%   values are ignored. This way, conditions can have different numbers of
-%   objective functions associated with them.
-
-% (c) 2015 David R Hagen and Bruce Tidor
-% This software is released under the GNU GPLv2 or later.
+% Outputs:
+%   H [ nT x nT real matrix ]
+%       The sum of all objective function hessians
+%   D [ nT x 1 real vector ]
+%       The sum of all objective function gradients
+%   G [ scalar real ]
+%       The objective function value
 
 %% Work-up
 % Clean up inputs
-if nargin < 4
-    opts = [];
+opts_ = [];
+opts_.UseAdjoint = false; % adjoint method can't be used for complex step differentiation for the hessian
+
+switch nargin
+    case 1
+        fit = varargin{1};
+    case 2
+        fit = varargin{1};
+        opts = varargin{2};
+        opts = mergestruct(opts_, opts);
+        fit.addOptions(opts);
+    otherwise % Old method
+        assert(nargin >= 3, 'KroneckerBio:ObjectiveHessian:TooFewInputs', 'ObjectiveValue requires at least 3 input arguments')
+        m = varargin{1};
+        con = varargin{2};
+        obj = varargin{3};
+        if nargin >= 4
+            opts = varargin{4};
+        else
+            opts = [];
+        end
+        opts = mergestruct(opts_, opts);
+        assert(isscalar(m), 'KroneckerBio:ObjectiveHessian:MoreThanOneModel', 'The model structure must be scalar')
+        fit = FitObject.buildFitObject(m, con, obj, opts);
 end
 
-assert(nargin >= 3, 'KroneckerBio:ObjectiveGradient:TooFewInputs', 'ObjectiveGradient requires at least 3 input arguments')
-assert(isscalar(m), 'KroneckerBio:ObjectiveGradient:MoreThanOneModel', 'The model structure must be scalar')
-
-% Default options
-defaultOpts.Verbose        = 1;
-
-defaultOpts.RelTol         = [];
-defaultOpts.AbsTol         = [];
-
-defaultOpts.ComplexStep  = false;
-
-defaultOpts.UseParams        = 1:m.nk;
-defaultOpts.UseSeeds         = [];
-defaultOpts.UseInputControls = [];
-defaultOpts.UseDoseControls  = [];
-
-defaultOpts.ObjWeights     = ones(size(obj));
-
-defaultOpts.Normalized     = true;
-defaultOpts.UseAdjoint     = false;
-
-opts = mergestruct(defaultOpts, opts);
-
+% For convenience, copy fit object's options into this space
+opts = fit.options;
 verbose = logical(opts.Verbose);
-opts.Verbose = max(opts.Verbose-1,0);
-
-% Constants
-nx = m.nx;
-ns = m.ns;
-nk = m.nk;
-n_con = numel(con);
-
-% Ensure UseParams is logical vector
-[opts.UseParams, nTk] = fixUseParams(opts.UseParams, nk);
-
-% Ensure UseSeeds is a logical matrix
-[opts.UseSeeds, nTs] = fixUseSeeds(opts.UseSeeds, ns, n_con);
-
-% Ensure UseControls is a cell vector of logical vectors
-[opts.UseInputControls, nTq] = fixUseControls(opts.UseInputControls, n_con, cat(1,con.nq));
-[opts.UseDoseControls, nTh] = fixUseControls(opts.UseDoseControls, n_con, cat(1,con.nh));
-
-nT = nTk + nTs + nTq + nTh;
 
 % Store starting parameter sets
-T0 = collectActiveParameters(m, con, opts.UseParams, opts.UseSeeds, opts.UseInputControls, opts.UseDoseControls);
-
-% Refresh conditions and objectives
-con = refreshCon(m, con);
-
-% Fix integration type
-[opts.continuous, opts.complex, opts.tGet] = fixIntegrationType(con, obj);
-
-% RelTol
-opts.RelTol = fixRelTol(opts.RelTol);
-
-% Fix AbsTol to be a cell array of vectors appropriate to the problem
-opts.AbsTol = fixAbsTol(opts.AbsTol, 2, opts.continuous, nx, n_con, opts.UseAdjoint, opts.UseParams, opts.UseSeeds, opts.UseInputControls, opts.UseDoseControls);
+T0 = fit.collectParams;
 
 %% Loop through conditions
+nT = length(T0);
 H = zeros(nT,nT);
 
 % Initial value
 if verbose; fprintf('Initial round\n'); end
-[~, D] = computeObjGrad(m, con, obj, opts);
+[G, D] = fit.computeObjective;
 
-for iT = 1:nT
-    if verbose; fprintf('Step %d of %d\n', iT, nT); end
+for i = 1:nT
+    if verbose; fprintf('Step %d of %d\n', i, nT); end
     
     % Set baseline parameters
-    T_i = T0(iT);
+    T_i = T0(i);
     T_up = T0;
     
     % Change current parameter by finite amount
@@ -147,15 +101,15 @@ for iT = 1:nT
     end
     diff = step_size * norm_factor * imag_factor;
     
-    % Compute objective values
-    T_up(iT) = T_up(iT) + diff;
-    [m, con] = updateAll(m, con, T_up, opts.UseParams, opts.UseSeeds, opts.UseInputControls, opts.UseDoseControls);
-    [~, D_up] = computeObjGrad(m, con, obj, opts);
-
     % Compute D
+    T_up(i) = T_up(i) + diff;
+    fit.updateParams(T_up);
+    [~, D_up] = fit.computeObjective;
+
+    % Compute H
     if opts.ComplexStep
-        H(:,iT) = imag(D_up) ./ step_size;
+        H(:,i) = imag(D_up) ./ step_size;
     else
-        H(:,iT) = (D_up - D) ./ step_size;
+        H(:,i) = (D_up - D) ./ step_size;
     end
 end

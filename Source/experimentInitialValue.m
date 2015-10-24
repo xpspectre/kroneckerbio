@@ -20,6 +20,7 @@ function con = experimentInitialValue(m, s, inp, dos, name)
 %   name: [ string ]
 %       Default = ''
 %       An arbitrary name for the experiment
+
 %
 %   Outputs
 %   con: [ experiment struct scalar ]
@@ -58,8 +59,9 @@ end
 
 % m
 assert(isscalar(m) && is(m, 'Model'), 'KroneckerBio:Experiment:m', 'm must be a Model')
-m = keepfields(m, {'Type', 's', 'u', 'ns', 'nu'});
+m = keepfields(m, {'Type', 'Name', 's', 'u', 'ns', 'nu'});
 nu = m.nu;
+parentModelName = m.Name;
 
 % s
 assert(numel(s) == m.ns, 'KroneckerBio:Experiment:s', 's must a vector with length equal to m.ns')
@@ -82,6 +84,7 @@ assert(ischar(name), 'KroneckerBio:Experiment:name', 'name must be a string')
 % Build experiment
 con.Type = 'Experiment:InitialValue';
 con.Name = name;
+con.ParentModelName = parentModelName;
 con.nu = m.nu;
 con.ns = m.ns;
 con.nq = numel(inp.q);
@@ -89,6 +92,7 @@ con.nh = numel(dos.h);
 con.s  = s;
 con.q  = inp.q;
 con.h  = dos.h;
+
 % Store input functions in a closure instead of leaving them in inp because accessing con.inp.u is slow
 [con.u,con.dudq,con.d2udq2] = getU(inp,m.nu);
 con.d  = @(t)dos.d(t,dos.h);

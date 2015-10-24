@@ -127,6 +127,8 @@ x0 = vec({m.States.InitialValue});
 r = vec({m.Reactions.Rate});
 
 z = {m.Rules.Expression}';
+zTarget = {m.Rules.Target}';
+zType = {m.Rules.Type}';
 
 y = vec({m.Outputs.Expression});
 
@@ -181,6 +183,19 @@ x0 = sym(x0);
 z  = sym(z);
 r  = sym(r);
 y  = sym(y);
+
+%% Substitute in single sub rules separately
+zTarget = substituteQuotedExpressions(zTarget, all_names, all_ids);
+zTarget = sym(zTarget);
+
+singleSubRuleInds = find(ismember(zType, 'single sub'));
+nSingleSubRules = length(singleSubRuleInds);
+for i = 1:nSingleSubRules
+    target = zTarget(i);
+    expression = z(i);
+    r = subs(r, target, expression);
+    y = subs(y, target, expression);
+end
 
 %% Substitute in expressions
 % Everything that is substitutable

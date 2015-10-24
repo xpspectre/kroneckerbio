@@ -32,8 +32,25 @@ function testT04(a)
 T04_Basic_ODE_Simulation;
 end
 
-function testT05(a)
-T05_Fitting_Parameters;
+function testT05a(a)
+T05a_Fitting_Parameters_Basic;
+end
+
+function testT05b(a)
+T05b_Mixed_Effects_Fitting;
+end
+
+function testT05c(a)
+T05c_Fit_Multiple_Models;
+end
+
+function testT05d(a)
+T05d_Nonlinear_Mixed_Effects_Fitting;
+end
+
+function testT05e(a)
+% currently highly experimental/built-in SAEM broken
+T05e_Builtin_NLME_Fitting;
 end
 
 function testT06(a)

@@ -24,6 +24,7 @@ obs.Complex = false;
 
 obs.tF = max([0;timelist]);
 obs.DiscreteTimes = discrete_times;
+obs.Outputs = unique(outputlist);
 
 obs.Simulation = @simulation;
 obs.Objective  = @objective;

@@ -50,8 +50,8 @@ if iscell(AbsTol) && iscell(AbsTol{1})
 end
 
 % Constants
-nTk = sum(UseParams);
-nTs = sum(sum(UseSeeds));
+nTk = nnz(UseParams);
+nTs = nnz(UseSeeds);
 nTq = sum(cat(1, UseInputControls{:}));
 nTh = sum(cat(1, UseDoseControls{:}));
 nT = nTk + nTs + nTq + nTh;

@@ -1,7 +1,7 @@
 function newCon = refreshCon(m, con)
 %refreshCon Update Kronecker Bio experimental conditions to a new model
 %
-%   Whenever either the topolgy or parameters of a model change, the
+%   Whenever either the topology or parameters of a model change, the
 %   experimental condition structures should be updated because they may
 %   depend on the changes. This function loops over the experimental
 %   conditions in order to accomplish this common task.

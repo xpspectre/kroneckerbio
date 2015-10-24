@@ -8,7 +8,8 @@ function dos = Dose(m, d, schedule, h, dddh, d2ddh2)
 %       A KroneckerBio Model for which this dose will be applied. The dose
 %       structure is valid for any Model which has the same number of seeds
 %   d: [ handle @(t,h) returns nonnegative matrix ns by numel(t) ]
-%       A function that returns the values of the doses at any time t. Doses are applied via the seeds
+%       A function that returns the values of the doses (in the form of a ns x 1 vector)
+%       at any time t. Doses are applied via the seeds
 %       to instantaneously update the state of the system. Must defined for
 %       all t and return zeros(ns,1) for times at which a dose is not
 %       given.

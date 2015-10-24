@@ -21,10 +21,12 @@ function [UseParams, nTk] = fixUseParams(UseParams, nk)
 
 if islogical(UseParams)
     UseParams = vec(UseParams);
-else%if isnumeric
+elseif isnumeric(UseParams)
     temp = UseParams;
     UseParams = zeros(nk, 1);
     UseParams(temp) = 1;
     UseParams = logical(UseParams);
+else
+    error('KroneckerBio:fixUseParams', 'UseParams must be a vector of logicals or numerics')
 end
 nTk = sum(UseParams);

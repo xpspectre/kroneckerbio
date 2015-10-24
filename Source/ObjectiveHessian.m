@@ -1,117 +1,58 @@
-function H = ObjectiveHessian(m, con, obj, opts)
+function [H, D, G] = ObjectiveHessian(varargin)
 %ObjectiveHessian Evaluate the hessian of a set of objective functions
 %
-%   D = ObjectiveHessian(m, con, obj, opts)
+%   This function accepts a FitObject + options or separate model, experimental
+%   condition(s), and objective function(s) + options.
 %
-%   Inputs
-%   m: [ model struct scalar ]
+%   [H, D, G] = ObjectiveHessian(FitObject, opts)
+%   [H, D, G] = ObjectiveHessian(m, con, obj, opts)
+%
+% Inputs:
+%   FitObject [ scalar FitObject ]
+%       Fitting scheme
+%   m [ scalar model struct ]
 %       The KroneckerBio model that will be simulated
-%   con: [ experiment struct vector ]
-%       The experimental conditions under which the model will be simulated
-%   obj: [ objective struct matrix ]
-%       The objective structures defining the objective functions to be
-%       evaluated.
-%       .UseModelSeeds [ logical scalar {false} ]
-%           Indicates that the model's seed parameters should be used
-%           instead of those of the experimental conditions
-%       .UseModelInputs [ logical scalar {false} ]
-%           Indicates that the model's inputs should be used instead of
-%           those of the experimental conditions
-%       .UseParams [ logical vector nk | positive integer vector {1:nk} ]
-%           Which kinetic parameters the gradient will be calculated on
-%       .UseSeeds [ logical matrix nx by nCon | logical vector nx |
-%                   positive integer vector {[]} ]
-%           Which seed parameters the gradient will be calculated on
-%       .UseControls [ cell vector nCon of logical vectors or positive 
-%                      integer vectors | logical vector nq | positive 
-%                      integer vector {[]} ]
-%           Which input control parameters the gradient will be calculated
-%           on
-%     	.ObjWeights [ real matrix nObj by nCon {ones(nObj,nCon)} ]
-%           Applies a post evaluation weight on each objective function
-%           in terms of how much it will contribute to the final objective
-%           function value
-%       .Normalized [ logical scalar {true} ]
-%           Indicates if the gradient should be computed in log parameters
-%           space
-%    	.UseAdjoint [ logical scalar {false} ]
-%           Indicates whether the gradient should be calculated via the
-%           adjoint method or the forward method.
-%       .RelTol [ nonnegative scalar {1e-6} ]
-%           Relative tolerance of the integration
-%       .AbsTol [ cell vector of nonnegative vectors | nonnegative vector |
-%                 nonegative scalar {1e-9} ]
-%           Absolute tolerance of the integration. If a cell vector is
-%           provided, a different AbsTol will be used for each experiment.
-%       .Verbose [ nonnegative integer scalar {1} ]
-%           Bigger number displays more progress information
+%   con [ nCon x 1 conditions struct vector ]
+%       The experimental conditions under which the model will be simulated. A
+%       nCon x 1 struct vector is allowed.
+%   obj [ nCon x nObj objectives struct matrix ]
+%       The objective functions under which the experiments will be simulated.
+%       Each row of obj has a corresponding row of con.
+%   opts [ options struct ]
+%       Options struct allowing the following fields, overriding existing values
+%       in m, con, and obj. See FitObject.buildFitObject opts for allowed
+%       fields.
 %
-%   Outputs
-%       H: [ real vector nT ]
-%           The sum of all objective function hessians
-
-% (c) 2013 David R Hagen & Bruce Tidor
-% This work is released under the MIT license.
+% Outputs:
+%   H [ nT x nT real matrix ]
+%       The sum of all objective function hessians
+%   D [ nT x 1 real vector ]
+%       The sum of all objective function gradients
+%   G [ scalar real ]
+%       The objective function value
 
 %% Work-up
 % Clean up inputs
-if nargin < 4
-    opts = [];
+switch nargin
+    case 1
+        fit = varargin{1};
+    case 2
+        fit = varargin{1};
+        opts = varargin{2};
+        fit.addOptions(opts);
+    otherwise % Old method
+        assert(nargin >= 3, 'KroneckerBio:ObjectiveHessian:TooFewInputs', 'ObjectiveValue requires at least 3 input arguments')
+        m = varargin{1};
+        con = varargin{2};
+        obj = varargin{3};
+        if nargin >= 4
+            opts = varargin{4};
+        else
+            opts = [];
+        end
+        assert(isscalar(m), 'KroneckerBio:ObjectiveHessian:MoreThanOneModel', 'The model structure must be scalar')
+        fit = FitObject.buildFitObject(m, con, obj, opts);
 end
 
-assert(nargin >= 3, 'KroneckerBio:ObjectiveGradient:TooFewInputs', 'ObjectiveGradient requires at least 3 input arguments')
-assert(isscalar(m), 'KroneckerBio:ObjectiveGradient:MoreThanOneModel', 'The model structure must be scalar')
-
-% Default options
-defaultOpts.Verbose          = 1;
-
-defaultOpts.RelTol           = [];
-defaultOpts.AbsTol           = [];
-
-defaultOpts.Normalized       = true;
-defaultOpts.UseParams        = 1:m.nk;
-defaultOpts.UseSeeds         = [];
-defaultOpts.UseInputControls = [];
-defaultOpts.UseDoseControls  = [];
-
-defaultOpts.ObjWeights       = ones(size(obj));
-
-defaultOpts.UseAdjoint       = false;
-
-opts = mergestruct(defaultOpts, opts);
-
-verbose = logical(opts.Verbose);
-opts.Verbose = max(opts.Verbose-1,0);
-
-% Constants
-nx = m.nx;
-ns = m.ns;
-nk = m.nk;
-n_con = numel(con);
-
-% Ensure UseParams is logical vector
-[opts.UseParams, nTk] = fixUseParams(opts.UseParams, nk);
-
-% Ensure UseSeeds is a logical matrix
-[opts.UseSeeds, nTs] = fixUseSeeds(opts.UseSeeds, ns, n_con);
-
-% Ensure UseControls is a cell vector of logical vectors
-[opts.UseInputControls, nTq] = fixUseControls(opts.UseInputControls, n_con, cat(1,con.nq));
-[opts.UseDoseControls, nTh] = fixUseControls(opts.UseDoseControls, n_con, cat(1,con.nh));
-
-nT = nTk + nTs + nTq + nTh;
-
-% Refresh conditions and objectives
-con = refreshCon(m, con);
-
-% Fix integration type
-[opts.continuous, opts.complex, opts.tGet] = fixIntegrationType(con, obj);
-
-% RelTol
-opts.RelTol = fixRelTol(opts.RelTol);
-
-% Fix AbsTol to be a cell array of vectors appropriate to the problem
-opts.AbsTol = fixAbsTol(opts.AbsTol, 3, opts.continuous, nx, n_con, opts.UseAdjoint, opts.UseParams, opts.UseSeeds, opts.UseInputControls, opts.UseDoseControls);
-
 %% Run main calculation
-[~, ~, H] = computeObjHess(m, con, obj, opts);
+[G, D, H] = fit.computeObjective;

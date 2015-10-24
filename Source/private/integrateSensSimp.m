@@ -12,11 +12,7 @@ nT  = nTk + nTs + nTq + nTh;
 
 dxdTStart = nx+1;
 dxdTEnd   = nx+nx*nT;
-normalized = opts.Normalized;
 T = collectActiveParameters(m, con, opts.UseParams, opts.UseSeeds, {opts.UseInputControls}, {opts.UseDoseControls});
-T_stack_x = vec(repmat(row(T), nx,1));
-T_stack_u = vec(repmat(row(T), nu,1));
-T_stack_y = vec(repmat(row(T), ny,1));
 
 y = m.y;
 u = con.u;
@@ -68,13 +64,16 @@ int.h = con.h;
 
 int.dydx = m.dydx;
 int.dydu = m.dydu;
+int.dydk = m.dydk;
 
 int.nT = nT;
+
 int.Normalized = opts.Normalized;
-int.UseParams = opts.UseParams;
-int.UseSeeds = opts.UseSeeds;
+
+int.UseParams        = opts.UseParams;
+int.UseSeeds         = opts.UseSeeds;
 int.UseInputControls = opts.UseInputControls;
-int.UseDoseControls = opts.UseDoseControls;
+int.UseDoseControls  = opts.UseDoseControls;
 
 int.t = sol.x;
 int.x = sol.y(1:nx,:);
@@ -97,7 +96,7 @@ for it = 1:nt
     int.dydT(:,it) = vec(dydx_i * dxdT_i + dydu_i * dudT_i + dydk_i * dkdT); % y_x * x_T + y_u * u_T + y_k * k_T -> y_T -> yT_
 end
 
-if normalized
+if opts.Normalized
     % Normalize sensitivities
     int.dxdT = normalizeDerivatives(T, int.dxdT);
     int.dudT = normalizeDerivatives(T, int.dudT);
@@ -127,7 +126,7 @@ for it = 1:nte
     int.dyedT(:,it) = vec(dyedx_i * dxedT_i + dyedu_i * duedT_i + dyedk_i * dkdT); % y_x * x_T + y_u * u_T + y_k * k_T -> y_T -> yT_
 end
 
-if normalized
+if opts.Normalized
     % Normalize events
     int.dxedT = normalizeDerivatives(T, int.dxedT);
     int.duedT = normalizeDerivatives(T, int.duedT);

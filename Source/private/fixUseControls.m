@@ -16,7 +16,7 @@ function [UseControls, nTq] = fixUseControls(UseControls, nCon, nq)
 %       The number of controls parameters in each experiment
 %
 %   Outputs
-%   UseControls: [ cell vector nCOn of logical vectors nq ]
+%   UseControls: [ cell vector nCon of logical vectors nq ]
 %       Standard form of UseControls
 %   nTq: [ nonnegative integer vector nCon ]
 %       Number of active control parameters in each

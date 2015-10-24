@@ -1,142 +1,83 @@
-function D = FiniteObjectiveGradient(m, con, obj, opts)
+function [D, G] = FiniteObjectiveGradient(varargin)
 %FiniteObjectiveGradient Evaluate the gradient of a set of objective
-%   functions using the finite difference approximation
+%   functions by finite difference approximation
 %
-%   D = FiniteObjectiveGradient(m, con, obj, opts)
+%   This function accepts a FitObject + options or separate model, experimental
+%   condition(s), and objective function(s) + options.
+%
+%   [D, G] = FiniteObjectiveGradient(FitObject, opts)
+%   [D, G] = FiniteObjectiveGradient(m, con, obj, opts)
 %
 %   This function is identical to ObjectiveGradient except that the
 %   gradient is calculated differently. This is useful for testing that
 %   custom-made objective functions have been coded correctly and that
 %   integration tolerances have been set appropriately.
 %
-%   Inputs
-%   m: [ model struct scalar ]
+% Inputs:
+%   FitObject [ scalar FitObject ]
+%       Fitting scheme
+%   m [ scalar model struct ]
 %       The KroneckerBio model that will be simulated
-%   con: [ experiment struct vector ]
-%       The experimental conditions under which the model will be simulated
-%   obj: [ objective struct matrix ]
-%       The objective structures defining the objective functions to be
-%       evaluated.
-%       .UseParams [ logical vector nk | positive integer vector {1:nk} ]
-%           Which kinetic parameters the gradient will be calculated on
-%       .UseSeeds [ logical matrix nx by nCon | logical vector nx |
-%                   positive integer vector {[]} ]
-%           Which seed parameters the gradient will be calculated on
-%       .UseInputControls [ cell vector nCon of logical vectors or positive 
-%                           integer vectors | logical vector nq | positive 
-%                           integer vector {[]} ]
-%           Indicates the input control parameters whose gradient will be
-%           calculated
-%       .UseDoseControls [ cell vector nCon of logical vectors or positive 
-%                           integer vectors | logical vector nq | positive 
-%                           integer vector {[]} ]
-%           Indicates the dose control parameters whose gradient will be
-%           calculated
-%     	.ObjWeights [ real matrix nObj by nCon {ones(nObj,nCon)} ]
-%           Applies a post evaluation weight on each objective function
-%           in terms of how much it will contribute to the final objective
-%           function value
-%       .Normalized [ logical scalar {true} ]
-%           Indicates if the gradient should be computed in log parameters
-%           space
-%       .RelTol [ nonnegative scalar {1e-6} ]
-%           Relative tolerance of the integration
-%       .AbsTol [ cell vector of nonnegative vectors | nonnegative vector |
-%                 nonegative scalar {1e-9} ]
-%           Absolute tolerance of the integration. If a cell vector is
-%           provided, a different AbsTol will be used for each experiment.
-%       .ComplexStep [ logical scalar {false} ]
-%           If set to true, use an imaginary finite difference step. This
-%           has the advantage of not requiring the subtraction of two large
-%           numbers, increasing the stability of the result, but comes at
-%           the cost of larger computational cost from evaluating
-%           expressions with complex numbers. If set to false (the
-%           default), a real finite difference step is used.
-%       .Verbose [ nonnegative integer scalar {1} ]
-%           Bigger number displays more progress information
+%   con [ nCon x 1 conditions struct vector ]
+%       The experimental conditions under which the model will be simulated. A
+%       nCon x 1 struct vector is allowed.
+%   obj [ nCon x nObj objectives struct matrix ]
+%       The objective functions under which the experiments will be simulated.
+%       Each row of obj has a corresponding row of con.
+%   opts [ options struct ]
+%       Options struct allowing the following fields, overriding existing values
+%       in m, con, and obj. See FitObject.buildFitObject opts for allowed
+%       fields.
 %
-%   Outputs
-%       D: [ real vector nT ]
-%           The sum of all objective function gradients
-
-% (c) 2015 David R Hagen & Bruce Tidor
-% This work is released under the MIT license.
+% Outputs:
+%   D [ nT x 1 real vector ]
+%       The sum of all objective function gradients
+%   G [ scalar real ]
+%       The objective function value
 
 %% Work-up
 % Clean up inputs
-if nargin < 4
-    opts = [];
+switch nargin
+    case 1
+        fit = varargin{1};
+    case 2
+        fit = varargin{1};
+        opts = varargin{2};
+        fit.addOptions(opts);
+    otherwise % Old method
+        assert(nargin >= 3, 'KroneckerBio:FiniteObjectiveGradient:TooFewInputs', 'ObjectiveValue requires at least 3 input arguments')
+        m = varargin{1};
+        con = varargin{2};
+        obj = varargin{3};
+        if nargin >= 4
+            opts = varargin{4};
+        else
+            opts = [];
+        end
+        assert(isscalar(m), 'KroneckerBio:FiniteObjectiveGradient:MoreThanOneModel', 'The model structure must be scalar')
+        fit = FitObject.buildFitObject(m, con, obj, opts);
 end
 
-assert(nargin >= 3, 'KroneckerBio:FiniteObjectiveGradient:TooFewInputs', 'FiniteObjectiveGradient requires at least 3 input arguments.')
-assert(isscalar(m), 'KroneckerBio:FiniteObjectiveGradient:MoreThanOneModel', 'The model structure must be scalar')
-
-% Default options
-defaultOpts.Verbose          = 1;
-
-defaultOpts.RelTol           = [];
-defaultOpts.AbsTol           = [];
-
-defaultOpts.ComplexStep    = false;
-
-defaultOpts.Normalized       = true;
-defaultOpts.UseParams        = 1:m.nk;
-defaultOpts.UseSeeds         = [];
-defaultOpts.UseInputControls = [];
-defaultOpts.UseDoseControls  = [];
-
-defaultOpts.ObjWeights       = ones(size(obj));
-
-opts = mergestruct(defaultOpts, opts);
-
+% For convenience, copy fit object's options into this space
+opts = fit.options;
 verbose = logical(opts.Verbose);
-opts.Verbose = max(opts.Verbose-1,0);
-
-% Constants
-nx = m.nx;
-ns = m.ns;
-nk = m.nk;
-nCon = numel(con);
-
-% Ensure UseParams is logical vector
-[opts.UseParams, nTk] = fixUseParams(opts.UseParams, nk);
-
-% Ensure UseICs is a logical matrix
-[opts.UseSeeds, nTs] = fixUseSeeds(opts.UseSeeds, ns, nCon);
-
-% Ensure UseControls is a cell vector of logical vectors
-[opts.UseInputControls, nTq] = fixUseControls(opts.UseInputControls, nCon, cat(1,con.nq));
-[opts.UseDoseControls, nTh] = fixUseControls(opts.UseDoseControls, nCon, cat(1,con.nh));
-
-nT = nTk + nTs + nTq + nTh;
 
 % Store starting parameter sets
-T0 = collectActiveParameters(m, con, opts.UseParams, opts.UseSeeds, opts.UseInputControls, opts.UseDoseControls);
-
-% Refresh conditions and objectives
-con = refreshCon(m, con);
-
-% Fix integration type
-[opts.continuous, opts.complex, opts.tGet] = fixIntegrationType(con, obj);
-
-% RelTol
-opts.RelTol = fixRelTol(opts.RelTol);
-
-% Fix AbsTol to be a cell array of vectors appropriate to the problem
-opts.AbsTol = fixAbsTol(opts.AbsTol, 1, opts.continuous, nx, nCon);
+T0 = fit.collectParams;
 
 %% Loop through conditions
+nT = length(T0);
 D = zeros(nT,1);
 
 % Initial value
 if verbose; fprintf('Initial round\n'); end
-G = computeObj(m, con, obj, opts);
+G = fit.computeObjective;
 
-for iT = 1:nT
-    if verbose; fprintf('Step %d of %d\n', iT, nT); end
+for i = 1:nT
+    if verbose; fprintf('Step %d of %d\n', i, nT); end
     
     % Set baseline parameters
-    T_i = T0(iT);
+    T_i = T0(i);
     T_up = T0;
     
     % Change current parameter by finite amount
@@ -153,15 +94,15 @@ for iT = 1:nT
     end
     diff = step_size * norm_factor * imag_factor;
     
-    % Compute objective values
-    T_up(iT) = T_up(iT) + diff;
-    [m, con] = updateAll(m, con, T_up, opts.UseParams, opts.UseSeeds, opts.UseInputControls, opts.UseDoseControls);
-    G_up = computeObj(m, con, obj, opts);
+    % Compute G
+    T_up(i) = T_up(i) + diff;
+    fit.updateParams(T_up);
+    G_up = fit.computeObjective;
 
     % Compute D
     if opts.ComplexStep
-        D(iT) = imag(G_up) ./ step_size;
+        D(i) = imag(G_up) ./ step_size;
     else
-        D(iT) = (G_up - G) ./ step_size;
+        D(i) = (G_up - G) ./ step_size;
     end
 end

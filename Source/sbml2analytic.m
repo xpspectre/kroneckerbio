@@ -196,7 +196,7 @@ for ir = 1:numel(sbml.reaction)
 end
 
 for iz = 1:nz
-    m = AddRule(m, z_names{iz}, z_values{iz});
+    m = AddRule(m, z_names{iz}, z_names{iz}, z_values{iz}); % rule type is ignored for imported SBML models
 end
 
 assert(isempty(sbml.functionDefinition), 'KroneckerBio:SBML:functions', 'Model contains a function definition that is not surrently supported.')

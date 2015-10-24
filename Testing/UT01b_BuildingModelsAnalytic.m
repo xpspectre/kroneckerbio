@@ -273,3 +273,10 @@ a.verifyEqual(test.nr, 0);
 a.verifyEqual(length(test.Reactions), 0);
 a.verifyError(@()RemoveReaction(m, 'r2'), 'KroneckerBio:RemoveReaction:ReactionNotFound');
 end
+
+function testStateSpaceEqModelBuilding(a)
+a.verifyFail % Not implemented yet in this rebase - revisit when reorganizing models interface, possibly with a separate model type that specifies ODEs
+% m = theo_model_statespace;
+% a.verifyEqual(m.nx, 2)
+% a.verifyEqual(m.f(0,[10,10],[]), [-15.0; 13.5])
+end

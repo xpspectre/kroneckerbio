@@ -22,7 +22,7 @@ function con = experimentZero(m)
 %       .nu [ whole scalar ]
 %           The number of inputs
 %       .ns [ whole scalar ]
-%           The number of seeds
+%           The number of seed parameters
 %       .nq [ whole scalar ]
 %           The number of input control parameters
 %       .nh [ whole scalar ]
@@ -75,13 +75,14 @@ function con = experimentZero(m)
 %           Some experimental conditions have extra information associated
 %           with them, which is stored here because Matlab does not like
 %           stacking structs with different fields.
+%   TODO: unify parameters
 
 % (c) 2015 David R Hagen & Bruce Tidor
 % This work is released under the MIT license.
 
 % Special case of numeric inputs
 if isnumeric(m)
-    con = emptystruct(m, 'Type', 'Name', 'nu', 'ns', 'nq', 'nh', 's', 'q', 'h', 'u', 'dudq', 'd2udq2', 'd', 'dddh', 'd2ddh2', 'inp', 'dos', 'SteadyState', 'Periodic', 'Discontinuities', 'Update', 'private');
+    con = emptystruct(m, 'Type', 'Name', 'ParentModelName', 'nu', 'ns', 'nq', 'nh', 's', 'q', 'h', 'u', 'dudq', 'd2udq2', 'd', 'dddh', 'd2ddh2', 'inp', 'dos', 'SteadyState', 'Periodic', 'Discontinuities', 'Update', 'private');
     return
 end
 

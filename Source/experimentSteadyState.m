@@ -1,5 +1,5 @@
 function con = experimentSteadyState(m, s, basal_input, inp, dos, time_scale, name)
-%SteadyStateExperiment Construct a KroneckerBio experimental conditions
+%experimentSteadyState Construct a KroneckerBio experimental conditions
 %   structure describing a initial value problem first run to steady state
 %
 %   con = experimentSteadyState(m, s, basal_input, inp, dos, time_scale, name)
@@ -31,6 +31,7 @@ function con = experimentSteadyState(m, s, basal_input, inp, dos, time_scale, na
 %   name: [ string ]
 %       Default = ''
 %       An arbitrary name for the experiment
+
 %
 %   Outputs
 %   con: [ experiment struct scalar ]
@@ -81,8 +82,9 @@ end
 
 % m
 assert(isscalar(m) && is(m, 'Model'), 'KroneckerBio:Experiment:m', 'm must be a Model')
-m = keepfields(m, {'Type', 's', 'u', 'ns', 'nu'});
+m = keepfields(m, {'Type', 'Name', 's', 'u', 'ns', 'nu'});
 nu = m.nu;
+parentModelName = m.Name;
 
 % s
 assert(numel(s) == m.ns, 'KroneckerBio:Experiment:s', 's must a vector with length equal to m.ns')
@@ -93,7 +95,6 @@ if isnumeric(inp)
     assert(numel(inp) == m.nu, 'KroneckerBio:Experiment:inp', 'inp, when numeric, must have a length of m.nu')
     inp = inputConstant(m, inp);
 end
-
 assert(is(inp, 'Input'), 'KroneckerBio:Experiment:inp', 'inp must be an Input')
 
 % basal_input
@@ -113,6 +114,7 @@ assert(ischar(name), 'KroneckerBio:Experiment:name', 'name must be a string')
 % Build experiment
 con.Type = 'Experiment:SteadyState';
 con.Name = name;
+con.ParentModelName = parentModelName;
 con.nu = m.nu;
 con.ns = m.ns;
 con.nq = numel(inp.q);

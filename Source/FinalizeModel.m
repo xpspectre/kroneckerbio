@@ -95,8 +95,6 @@ assert(isempty(xu_repeated), 'KroneckerBio:FinalizeModel:RepeatSpecies', 'Specie
 y_repeated = y_names(setdiff(1:ny, ia));
 assert(isempty(y_repeated), 'KroneckerBio:FinalizeModel:RepeatOutput', 'Output %s not unique', cellstr2str(y_repeated))
 
-% Does it make sense to exclude repeated reactions and rules?
-
 %% Resolve species compartments and standardize names
 
     function matches = getSpeciesFromExpr(expr)

@@ -1,4 +1,4 @@
-function obs = observationNLME(output, timelist, method, name)
+function obs = observationFO(output, timelist, method, name)
 % Nonlinear mixed effects observation and objective function for a patient
 %
 % Inputs:
@@ -71,13 +71,13 @@ end
 function obj = objectiveNLME(output, timelist, measurements, method, name)
 
 % Make sure a single output name is provided
-assert(ischar(output), 'observationNLME_FO:nonscalarOutput', 'Output must be a string')
+assert(ischar(output), 'observationFO:nonscalarOutput', 'Output must be a string')
 
 % Find unique timelist
 discrete_times = row(unique(timelist));
 
 % Inherit observation
-obj = observationNLME(output, timelist, method, name);
+obj = observationFO(output, timelist, method, name);
 
 obj.Type = 'Objective.Data.NLME';
 obj.Continuous = false;

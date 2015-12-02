@@ -26,6 +26,9 @@ end
 %   Verify that names are present in model and have corresponding etas
 %   Vefity that Omega is lower triangular. If not, warn and only take lower triangular elements.
 
+% Store omegas, where Omega is given in terms of omegas^2
+Omega = sqrt(Omega);
+
 % Add sigmas going down cols of lower triangular Omega
 for j = 1:n
     for i = j:n

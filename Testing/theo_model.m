@@ -4,13 +4,13 @@ function m = theo_model
 
 m = InitializeModelAnalytic('TheoModel');
 
-m = AddCompartment(m, 'v', 3, 1);
+m = AddCompartment(m, 'vol', 3, 1);
 
 m = AddSeed(m, 'Xg0', 320); % mg, bolus dose at t = 0 represented as a an initial condition/seed of GI compartment
 m = AddSeed(m, 'Xp0', 0); % mg
 
-m = AddState(m, 'Xg', 'v', 'Xg0'); % mg
-m = AddState(m, 'Xp', 'v', 'Xp0'); % mg
+m = AddState(m, 'Xg', 'vol', 'Xg0'); % mg
+m = AddState(m, 'Xp', 'vol', 'Xp0'); % mg
 
 m = AddParameter(m, 'ka',  1.5); % 1/hr
 m = AddParameter(m, 'kel', 0.15); % 1/hr
@@ -30,14 +30,10 @@ m = AddOutput(m, 'Cp', 'Xp/V'); % mg/L
 m = AddEta(m, 'ka'); % default is lognormal, ka = ka*exp(eta_ka), FO method
 m = AddEta(m, 'kel');
 m = AddEta(m, 'V');
-m = AddOmega(m, {'ka','kel','V'}, [0.2 0 0; 0.1 0.2 0; 0.1 0.1 0.2]);
+m = AddOmega(m, {'ka','kel','V'}, sqrt([0.2 0 0; 0.1 0.2 0; 0.1 0.1 0.2]));
 
 % Add intraindividual variability parameters epsilons
-% Remember to add Sigma after these
-% m = AddEps(m, 'Cp'); % desired default invocation: adds 1 eps for proportional model
-m = AddEps(m, 'Cp', 'Cp + Cp*eps__Cp1 + eps__Cp2', {'eps__Cp1', 'eps__Cp2'}); % explicitly provide eps names because of custom error model
-m = AddSigma(m, {'Cp1', 'Cp2'}, [0.1 0; 0 0.1]);
+m = AddErrorModel(m, 'Cp'); % Simple outer error - constant term only for direct comparison to FO
+% m = AddErrorModel(m, 'Cp', 'Cp*sigma__Cp1 + sigma__Cp2', {'sigma__Cp1', 'sigma__Cp2'}); % original combined error
 
 m = FinalizeModel(m);
-
-end

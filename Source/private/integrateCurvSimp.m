@@ -80,6 +80,16 @@ int.dydx = m.dydx;
 int.dydu = m.dydu;
 int.dydk = m.dydk;
 
+int.d2ydx2  = m.d2ydx2;
+int.d2ydu2  = m.d2ydu2;
+int.d2ydk2  = m.d2ydk2;
+int.d2ydudx = m.d2ydudx;
+int.d2ydxdu = m.d2ydxdu;
+int.d2ydkdx = m.d2ydkdx;
+int.d2ydxdk = m.d2ydxdk;
+int.d2ydkdu = m.d2ydkdu;
+int.d2ydudk = m.d2ydudk;
+
 int.nT = nT;
 int.UseParams = opts.UseParams;
 int.UseSeeds = opts.UseSeeds;

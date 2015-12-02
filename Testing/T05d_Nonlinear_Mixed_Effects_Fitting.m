@@ -5,24 +5,24 @@ fit = FitObject('T05d_NLME_Fit');
 
 %% Load data
 theoph = load_theo();
-nIds = height(theoph);
-% nIds = 3; % Testing: subset of patients for now
+% nIds = height(theoph);
+nIds = 3; % Testing: subset of patients for now
 
 % Visualize dataset
-figure
-hold on
-for i = 1:nIds
-    plot(theoph.Time{i}, theoph.Conc{i})
-end
-hold off
-xlabel('Time')
-ylabel('Conc')
+% figure
+% hold on
+% for i = 1:nIds
+%     plot(theoph.Time{i}, theoph.Conc{i})
+% end
+% hold off
+% xlabel('Time')
+% ylabel('Conc')
 
 %% Load model
 % Model contains nominal dose of 320 mg
-m = theo_model;
-save('theo_model.mat', 'm');
-% load('theo_model.mat');
+% m = theo_model;
+% save('theo_model.mat', 'm');
+load('theo_model.mat');
 
 fit.addModel(m);
 
@@ -40,7 +40,7 @@ for i = 1:nIds
     con = experimentInitialValue(m, [dose; 0], [], [], ['TheoCon' num2str(i)]); % modified ICs
     
     % Specify objective function
-    obs = observationNLME('Cp', times, method, ['TheoObs' num2str(i)]);
+    obs = observationFOCEI('Cp', times, method, ['TheoObs' num2str(i)]);
     obj = obs.Objective(concs);
     
     % Specify table of parameter, condition, and fitting options
@@ -85,4 +85,4 @@ opts.UseAdjoint = false; % Can't use adjoint (for now) since dy/dT sensitivities
 G = ObjectiveValue(fit, opts);
 
 %% Fit
-% fitOut = FitObjective(fit, opts);
+fitOut = FitObjective(fit, opts);

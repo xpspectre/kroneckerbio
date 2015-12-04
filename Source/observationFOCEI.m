@@ -118,6 +118,7 @@ obj = pastestruct(objectiveZero(), obj);
 %       filling in values for partial derivatives denoted by starting with p
 %   assume Rij is diagonal
 %       but maintain it as a matrix for various operations
+%   dOmega_dtheta = 0 assumed for now
     function [val, discrete] = calcParts(int, order)
         % All terms with star are evaluated at optimal eta star (same as eta in FO method)
         % Inputs:
@@ -152,7 +153,7 @@ obj = pastestruct(objectiveZero(), obj);
         neta = length(etaInds);
         
         Omega = getOmega(int.k, int.k_names, thetaInds, omegaInds);
-        Omega = Omega.^2; % variances are omegas squared?
+        Omega = Omega.^2; % TODO: variances are omegas squared?
         Omega_ = inv(Omega);
         
         etai = int.k(etaInds);
@@ -160,10 +161,11 @@ obj = pastestruct(objectiveZero(), obj);
         % Do everything by timepoints
         ni = size(measurements,1);
         
-        %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        % Assemble G components
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         if order >= 1
+            %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+            % Assemble G components
+            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+            
             epsi        = zeros(nh,ni);
             
             Ri          = zeros(nh,nh,ni);
@@ -277,9 +279,7 @@ obj = pastestruct(objectiveZero(), obj);
                     % Eq 20
                     % Careful with squeezing/reshaping Ri with single output when tensor is needed - will remove extra singleton dims
                     pdRij_detaik = squeeze(pdRi_detai(:,:,k,j));
-                    %                 pdRij_detaik = reshape(pdRi_detai(:,:,k,j), nh,nh,1);
-                    %                 pdRij_dxij   = squeeze(pdRi_dxi(:,:,:,j));
-                    pdRij_dxij   = reshape(pdRi_dxi(:,:,:,j), nh,nh,[]);
+                    pdRij_dxij   = reshape(pdRi_dxi(:,:,:,j), nh,nh,nx);
                     dRij_detaik = pdRij_detaik + tprod(pdRij_dxij, [1,2,-1], dxij_detaik, [-1]); % contract on xi
                     dRi_detai(:,:,k,j) = dRij_detaik;
                     
@@ -347,43 +347,57 @@ obj = pastestruct(objectiveZero(), obj);
             discrete = 0;
         end
         
-        %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        % Assemble dGdk components
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % Reevaluate int at etastar vs eta in FOCE vs FO
+        
         if order >= 2
+            %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+            % Assemble dGdk components
+            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
             
+            % Assume
+            Ristar  = Ri;
+            Ristar_ = Ri_;
+            Rijstar = Rij;
+            Rijstar_ = Rij_;
+            dOmega_dtheta = zeros(neta,neta,ntheta); % assume
+            dOmega_dtheta_ = zeros(neta,neta,ntheta); % assume (calculated from inv of Omega, then set to 0)
+            
+            pdh_dtheta = zeros(nh,ntheta,ni); % depends on time
             pdRi_dtheta = zeros(nh,nh,ntheta,ni);
             dxi_dtheta = zeros(nx,ntheta,ni);
             
             pd2h_detaidtheta = zeros(nh,neta,ntheta,ni);
+            pd2Ri_detaidtheta = zeros(nh,nh,neta,ntheta,ni);
+            
             pd2h_detaidxi = zeros(nh,neta,nx,ni);
+            pd2Ri_detaidxi = zeros(nh,nh,neta,nx,ni);
+            
             pd2h_dxidtheta = zeros(nh,nx,ntheta,ni);
+            pd2Ri_dxidtheta = zeros(nh,nh,nx,ntheta,ni);
+            
             pd2h_dxi2 = zeros(nh,nx,nx,ni);
-            pd2h_detaidetai = zeros(nh,neta,neta,ni);
-            pd2h_dxidetai = zeros(nh,nx,neta,ni); % same as pd2h_detaidxi but transposed?
+            pd2Ri_dxi2 = zeros(nh,nh,nx,nx,ni);
+            
+            pd2h_detaidetai = zeros(nh,neta,neta,ni); % depends on time
+            pd2Ri_detaidetai = zeros(nh,nh,neta,neta,ni);
+            
+            pd2h_dxidetai = zeros(nh,nx,neta,ni);
+            pd2Ri_dxidetai = zeros(nh,nh,nx,neta,ni);
+            
             d2xi_detaidtheta = zeros(nx,neta,ntheta,ni);
             d2xi_detaidetai = zeros(nx,neta,neta,ni);
             
-            dastar_dtheta = zeros(nh,neta,ntheta,ni);
-            dBstar_dtheta = zeros(nh,nh,ntheta,ni);
-            dcstar_dtheta = zeros(nh,nh,neta,ntheta,ni);
-            
-            depsi_dtheta  = zeros(nh,ntheta,ni);
-            dRi_dtheta    = zeros(nh,nh,ntheta,ni);
-            
             for j = 1:ni
                 
-                % Assume
-                Rijstar = Rij;
-                Rijstar_ = Rij_;
                 
                 % In Eq 34
-                pdh_dtheta = zeros(nh,ntheta);
+                pdh_dthetaj = zeros(nh,ntheta);
                 for ih = 1:nh
                     for m = 1:ntheta
-                        pdh_dtheta(ih,m) = pdydkj(hInds(ih),thetaInds(m));
+                        pdh_dthetaj(ih,m) = pdydkj(hInds(ih),thetaInds(m));
                     end
                 end
+                pdh_dtheta(:,:,j) = pdh_dthetaj;
                 
                 % In Eq 35
                 pdRij_dtheta = zeros(nh,nh,ntheta);
@@ -418,82 +432,112 @@ obj = pastestruct(objectiveZero(), obj);
                 pd2ydxdkj = int.d2ydxdk([], int.x(:,j), int.u(:,j)); % [[y,k], x]
                 
                 % In Eq 37
-                pd2h_detaikdthetam = zeros(nh,neta,ntheta);
+                pd2h_detaidtheta   = zeros(nh,neta,ntheta);
+                pd2Rij_detaidtheta = zeros(nh,nh,neta,ntheta);
                 for ih = 1:nh
                     for k = 1:neta
                         for m = 1:ntheta
                             etaInd = etaInds(k);
                             hthetaInd = ny*(thetaInds(m)-1) + hInds(ih);
-                            pd2h_detaikdthetam(ih,k,m) = pd2ydk2j(hthetaInd,etaInd);
+                            RithetaInd = ny*(thetaInds(m)-1) + RiInds(ih);
+                            
+                            pd2h_detaidtheta(ih,k,m) = pd2ydk2j(hthetaInd,etaInd);
+                            pd2Rij_detaidtheta(ih,ih,k,m) = pd2ydk2j(RithetaInd,etaInd);
                         end
                     end
                 end
-                pd2h_detaidtheta(:,:,:,j) = pd2h_detaikdthetam;
+                pd2h_detaidtheta(:,:,:,j) = pd2h_detaidtheta;
+                pd2Ri_detaidtheta(:,:,:,:,j) = pd2Rij_detaidtheta;
                 
                 % In Eq 37
-                pd2h_detaikdxij = zeros(nh,neta,nx);
+                pd2h_detaidxij = zeros(nh,neta,nx);
+                pd2Rij_detaidxij = zeros(nh,nh,neta,nx);
                 for ih = 1:nh
                     for k = 1:neta
                         for ix = 1:nx
                             etaInd = etaInds(k);
                             hxInd = ny*(ix-1) + hInds(ih);
-                            pd2h_detaikdxij(ih,k,ix) = pd2ydkdxj(hxInd,etaInd);
+                            RixInd = ny*(ix-1) + RiInds(ih);
+                            
+                            pd2h_detaidxij(ih,k,ix) = pd2ydkdxj(hxInd,etaInd);
+                            pd2Rij_detaidxij(ih,ih,k,ix) = pd2ydkdxj(RixInd,etaInd);
                         end
                     end
                 end
-                pd2h_detaidxi(:,:,:,j) = pd2h_detaikdxij;
+                pd2h_detaidxi(:,:,:,j) = pd2h_detaidxij;
+                pd2Ri_detaidxi(:,:,:,:,j) = pd2Rij_detaidxij;
                 
                 % In Eq 37
-                pd2h_dxijdthetam = zeros(nh,nx,ntheta);
+                pd2h_dxijdtheta = zeros(nh,nx,ntheta);
+                pd2Rij_dxijdtheta = zeros(nh,nh,nx,ntheta);
                 for ih = 1:nh
                     for ix = 1:nx
                         for m = 1:ntheta
                             xInd = ix;
                             hthetaInd = ny*(thetaInds(m)-1) + hInds(ih);
-                            pd2h_dxijdthetam(nh,nx,ntheta) = pd2ydxdkj(hthetaInd,xInd);
+                            RithetaInd = ny*(thetaInds(m)-1) + RiInds(ih);
+                            
+                            pd2h_dxijdtheta(nh,nx,ntheta) = pd2ydxdkj(hthetaInd,xInd);
+                            pd2Rij_dxijdtheta(nh,nh,nx,ntheta) = pd2ydxdkj(RithetaInd,xInd);
                         end
                     end
                 end
-                pd2h_dxidtheta(:,:,:,j) = pd2h_dxijdthetam;
+                pd2h_dxidtheta(:,:,:,j) = pd2h_dxijdtheta;
+                pd2Ri_dxidtheta(:,:,:,:,j) = pd2Rij_dxijdtheta;
                 
                 % In Eq 37
                 pd2h_dxij2 = zeros(nh,nx,nx);
+                pd2Rij_dxij2 = zeros(nh,nh,nx,nx);
                 for ih = 1:nh
                     for ix = 1:nx
                         for jx = 1:nx
                             xInd = ix;
                             hxInd = ny*(jx-1) + hInds(ih);
+                            RixInd = ny*(jx-1) + RiInds(ih);
+                            
                             pd2h_dxij2(ih,ix,jx) = pd2ydx2j(hxInd,xInd);
+                            pd2Rij_dxij2(ih,ih,ix,jx) = pd2ydx2j(RixInd,xInd);
                         end
                     end
                 end
                 pd2h_dxi2(:,:,:,j) = pd2h_dxij2;
+                pd2Ri_dxi2(:,:,:,:,j) = pd2Rij_dxij2;
                 
                 % In Eq 37
-                pd2h_detaikdetail = zeros(nh,neta,neta);
+                pd2h_detaidetaij = zeros(nh,neta,neta); % depends on time
+                pd2Rij_detaidetai = zeros(nh,nh,neta,neta);
                 for ih = 1:nh
                     for k = 1:neta
                         for l = 1:neta
                             etaInd = etaInds(k);
                             hetaInd = ny*(etaInds(l)-1) + hInds(ih);
-                            pd2h_detaikdetail(ih,k,l) = pd2ydk2j(hetaInd,etaInd);
+                            RietaInd = ny*(etaInds(l)-1) + RiInds(ih);
+                            
+                            pd2h_detaidetaij(ih,k,l) = pd2ydk2j(hetaInd,etaInd);
+                            pd2Rij_detaidetai(ih,ih,k,l) = pd2ydk2j(RietaInd,etaInd);
                         end
                     end
                 end
-                pd2h_detaidetai(:,:,:,j) = pd2h_detaikdetail;
+                pd2h_detaidetai(:,:,:,j) = pd2h_detaidetaij;
+                pd2Ri_detaidetai(:,:,:,:,j) = pd2Rij_detaidetai;
                 
                 % In Eq 37
-                pd2h_dxijdetail = zeros(nh,nx,neta);
+                pd2h_dxijdetai = zeros(nh,nx,neta);
+                pd2Rij_dxijdetai = zeros(nh,nh,nx,neta);
                 for ih = 1:nh
                     for ix = 1:nx
                         for l = 1:neta
                             xInd = ix;
                             hetaInd = ny*(etaInds(l)-1) + hInds(ih);
-                            pd2h_dxijdetail(ih,ix,l) = pd2ydxdkj(hetaInd,xInd);
+                            RietaInd = ny*(etaInds(l)-1) + RiInds(ih);
+                            
+                            pd2h_dxijdetai(ih,ix,l) = pd2ydxdkj(hetaInd,xInd);
+                            pd2Rij_dxijdetai(ih,ih,ix,l) = pd2ydxdkj(RietaInd,xInd);
                         end
                     end
                 end
-                pd2h_dxidetai(:,:,:,j) = pd2h_dxijdetail;
+                pd2h_dxidetai(:,:,:,j) = pd2h_dxijdetai;
+                pd2Ri_dxidetai(:,:,:,:,j) = pd2Rij_dxijdetai;
                 
                 % In Eq 37
                 % x changes fastest, then thetam; etaik changes slowest
@@ -527,75 +571,16 @@ obj = pastestruct(objectiveZero(), obj);
             % Calculate dGdk
             %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
             
-            % Eq 46 derivs
-            d2epsi_detaidetai = zeros(nh,neta,neta,nj);
-            d2Ri_detaidetai   = zeros(nh,nh,neta,neta,ni);
-            for j = 1:ni
-                % Eq 19 deriv wrt eta again
-                d2epsi_detaikdetail = zeros(nh,neta,neta);
-                for k = 1:neta
-                    for l = 1:neta
-                        d2epsi_detaikdetail(:,k,l) = [];
-                    end
-                end
-                d2epsi_detaidetai(:,:,:,j) = d2epsi_detaikdetail;
-                
-                % Eq 20 deriv wrt eta again
-                d2Ri_detaikdetail = zeros(nh,nh,neta,neta);
-                for k = 1:neta
-                    for l = 1:neta
-                        d2Ri_detaikdetail(:,:,k,l) = [];
-                    end
-                end
-                d2Ri_detaidetai(:,:,:,:,j) = d2Ri_detaikdetail;
-            end
+            % Assume
+            epsistar = epsi;
+            astar = a;
+            Bstar = B;
+            cstar = c;
             
-            dRistar_dtheta = zeros(nh,nh,ntheta,ni);
-            
+            depsi_dtheta = zeros(nh,ntheta,ni);
+            dRi_dtheta   = zeros(nh,nh,ntheta,ni);
             for j = 1:ni
                 for m = 1:ntheta
-                    
-                    % Assume
-                    dOmega_dthetam = 0;
-                    dOmega_dtheta = zeros(neta,neta,ntheta);
-                    dOmegakl_dthetam_ = 0;
-                    astar = a;
-                    Bstar = B;
-                    cstar = c;
-                    
-                    % Eq 47 eta deriv select term
-                    detai_detai = eye(neta); % TODO: check this
-                    
-                    % Eq 47
-                    d2li_detaidtheta = zeros(neta,ntheta);
-                    for k = 1:neta
-                        for m = 1:ntheta
-                            dOmega_dthetam = squeeze(dOmega_dtheta(:,:,m));
-                            
-                            terms = zeros(ni,1);
-                            for j = 1:ni
-                                depsij_dthetam = squeeze(depsi_dtheta(:,m,j));
-                                depsij_detaik  = squeeze(depsi_detai(:,k,j));
-                                dRij_dthetam   = squeeze(dRi_dtheta(:,:,m,j));
-                                dRij_detaik    = squeeze(dRi_detai(:,:,k,j));
-                                d2epsij_detaikdthetam = squeeze(d2epsi_detaidtheta(:,k,m,j));
-                                d2Rij_detaikdthetam = squeeze(d2Ri_detaidtheta(:,:,k,m,j));
-                                detai_detaik = squeeze(detai_detai(:,k));
-                                
-                                
-                                terms(j) = 2*depsij_dthetam'*Rij_*depsij_detaik - 2*epsij'*Rij_*dRij_dthetam*Rij_*depsij_detaik + ...
-                                    2*epsij'*Rij_*d2epsij_detaikdthetam - epsij'*Rij_*d2Rij_detaikdthetam*Rij_*epsij + ...
-                                    2*epsij'*Rij_*dRij_detaik*Rij_*dRij_dthetam*Rij_*epsij - ...
-                                    2*epsij'*Rij_*dRij_detaik*Rij_*depsij_dthetam + ...
-                                    trace(Rij_*dRij_dthetam*Rij_*dRij_detaik + Rij_*d2Rij_detaikdthetam) - ...
-                                    etai'*Omega_*dOmega_dthetam*Omega_*detai_detaik;
-                            end
-                            d2li_detaidtheta(k,m) = -1/2 * sum(terms) - etai'*dOmega_dthetam*Omega_*detai_detaik;
-                        end
-                    end
-                    
-                    % Eq 46
-                    detaistar_dtheta = -inv(d2li_detai2)*d2li_detaidtheta;
                     
                     % Eq 34
                     pdh_dthetam  = squeeze(pdh_dtheta(:,m));
@@ -606,106 +591,288 @@ obj = pastestruct(objectiveZero(), obj);
                     
                     % Eq 36
                     pdRij_dthetam = squeeze(pdRi_dtheta(:,:,m,j));
-                    pdRij_dxij    = reshape(pdRi_dxi(:,:,:,j), nh,nh,[]);
-                    dRij_dthetam = pdRij_dthetam + tprod(pdRij_dxij, [1,2,-1], dxij_dthetam, [-1]); % contract on xi
+                    pdRij_dxij    = reshape(pdRi_dxi(:,:,:,j), nh,nh,nx);
+                    dRij_dthetam = pdRij_dthetam + tprod(pdRij_dxij, [1,2,-1], dxij_dthetam, [-1]);
                     dRi_dtheta(:,:,m,j) = dRij_dthetam;
+                end
+            end
+            
+            % Eq 46 second derivs for Eq 13
+            % Eq 19 deriv wrt eta again
+            % Eq 20 deriv wrt eta again
+            d2epsi_detaidetai = zeros(nh,neta,neta,ni);
+            d2Ri_detaidetai   = zeros(nh,nh,neta,neta,ni);
+            for j = 1:ni
+                
+                for l = 1:neta
+                    for k = 1:neta
+                        dxij_detaik        = squeeze(dxi_detai(:,k,j));
+                        dxij_detail        = squeeze(dxi_detai(:,l,j));
+                        d2xij_detaikdetail = squeeze(d2xi_detaidetai(:,k,l,j));
+                        
+                        pdh_dxij          = squeeze(pdh_dxi(:,:,j));
+                        pd2h_dxij2        = reshape(pd2h_dxi2(:,:,:,j), nh,nx,nx);
+                        pd2h_dxijdetail   = squeeze(pd2h_dxidetai(:,:,l,j));
+                        pd2h_detaikdxij   = reshape(pd2h_detaidxi(:,k,:,j), nh,nx);
+                        pd2h_detaikdetail = squeeze(pd2h_detaidetai(:,k,l,j));
+                        
+                        d2epsi_detaidetai(:,k,l,j) = -(pd2h_detaikdetail + pd2h_detaikdxij*dxij_detail + ...
+                            (pd2h_dxijdetail + tprod(pd2h_dxij2, [1,2,-1], dxij_detail, [-1]))*dxij_detaik + ...
+                            pdh_dxij*d2xij_detaikdetail);
+                        
+                        pdRij_dxij          = reshape(pdRi_dxi(:,:,:,j), nh,nh,nx);
+                        pd2Rij_dxij2        = reshape(pd2Ri_dxi2(:,:,:,:,j), nh,nh,nx,nx);
+                        pd2Rij_dxijdetail   = reshape(pd2Ri_dxidetai(:,:,:,l,j), nh,nh,nx);
+                        pd2Rij_detaikdxij   = reshape(pd2Ri_detaidxi(:,:,k,:,j), nh,nh,nx);
+                        pd2Rij_detaikdetail = squeeze(pd2Ri_detaidetai(:,:,k,l,j));
+                        
+                        d2Ri_detaidetai(:,:,k,l,j) = pd2Rij_detaikdetail + tprod(pd2Rij_detaikdxij, [1,2,-1], dxij_detail, [-1]) + ...
+                            tprod((pd2Rij_dxijdetail + tprod(pd2Rij_dxij2, [1,2,3,-1], dxij_detail, [-1])), [1,2,-1], dxij_detaik, [-1]) + ...
+                            tprod(pdRij_dxij, [1,2,-1], d2xij_detaikdetail, [-1]);
+                    end
+                end
+            end
+            
+            % For Eq 37 term1 and Eq 47
+            % For Eq 37 corresponding Rij term1 and Eq 47
+            d2epsi_detaidtheta = zeros(nh,neta,ntheta,ni);
+            d2Ri_detaidtheta = zeros(nh,nh,neta,ntheta,ni);
+            for j = 1:ni
+                for m = 1:ntheta
+                    for k = 1:neta
+                        dxij_detaik         = squeeze(dxi_detai(:,k,j));
+                        dxij_dthetam        = squeeze(dxi_dtheta(:,m,j));
+                        d2xij_detaikdthetam = squeeze(d2xi_detaidtheta(:,k,m,j));
+                        
+                        pdh_dxij            = squeeze(pdh_dxi(:,:,j));
+                        pd2h_dxij2          = reshape(pd2h_dxi2(:,:,:,j), nh,nx,nx);
+                        pd2h_dxijdthetam    = squeeze(pd2h_dxidtheta(:,:,m,j));
+                        pd2h_detaikdxij     = reshape(pd2h_detaidxi(:,k,:,j), nh,nx);
+                        pd2h_detaikdthetam  = squeeze(pd2h_detaidtheta(:,k,m,j));
+                        
+                        d2epsi_detaidtheta(:,k,m,j) = -(pd2h_detaikdthetam + pd2h_detaikdxij*dxij_dthetam + ...
+                            (pd2h_dxijdthetam + tprod(pd2h_dxij2, [1,2,-1], dxij_dthetam, [-1]))*dxij_detaik + ...
+                            pdh_dxij*d2xij_detaikdthetam);
+                        
+                        pdRij_dxij           = reshape(pdRi_dxi(:,:,:,j), nh,nh,nx);
+                        pd2Rij_dxij2         = reshape(pd2Ri_dxi2(:,:,:,:,j), nh,nh,nx,nx);
+                        pd2Rij_dxijdthetam   = squeeze(pd2Ri_dxidtheta(:,:,nx,m,j));
+                        pd2Rij_detaikdxij    = reshape(pd2Ri_detaidxi(:,:,k,:,j), nh,nh,nx);
+                        pd2Rij_detaikdthetam = squeeze(pd2Ri_detaidtheta(:,:,k,m,j));
+                        
+                        d2Ri_detaidtheta(:,:,k,m,j) = pd2Rij_detaikdthetam + tprod(pd2Rij_detaikdxij, [1,2,-1], dxij_dthetam, [-1]) + ...
+                            tprod((pd2Rij_dxijdthetam + tprod(pd2Rij_dxij2, [1,2,3,-1], dxij_dthetam, [-1])), [1,2,-1], dxij_detaik, [-1]) + ...
+                            tprod(pdRij_dxij, [1,2,-1], d2xij_detaikdthetam, [-1]);
+                    end
+                end
+            end
+            
+            % Eq 13
+            d2li_detai2 = zeros(neta,neta);
+            for k = 1:neta
+                for l = 1:neta
+                    
+                    terms = zeros(ni,1);
+                    for j = 1:ni
+                        epsij                = squeeze(epsi(:,j));
+                        Rij_                 = squeeze(Ri_(:,:,j));
+                        depsij_detail        = squeeze(depsi_detai(:,l,j));
+                        depsij_detaik        = squeeze(depsi_detai(:,k,j));
+                        dRij_detail          = squeeze(dRi_detai(:,:,l,j));
+                        dRij_detaik          = squeeze(dRi_detai(:,:,k,j));
+                        d2epsij_detaikdetail = squeeze(d2epsi_detaidetai(:,k,l,j));
+                        d2Rij_detaikdetail   = squeeze(d2Ri_detaidetai(:,:,k,l,j));
+                        
+                        terms(j) = 2*depsij_detail'*Rij_*depsij_detaik - 2*epsij'*Rij_*dRij_detail*Rij_*depsij_detaik + ...
+                            2*epsij'*Rij_*d2epsij_detaikdetail - epsij'*Rij_*d2Rij_detaikdetail*Rij_*epsij + ...
+                            2*epsij'*Rij_*dRij_detaik*Rij_*dRij_detail*Rij_*epsij - ...
+                            2*epsij'*Rij_*dRij_detaik*Rij_*depsij_detail - ...
+                            trace(Rij_*dRij_detail*Rij_*dRij_detaik) + ...
+                            trace(Rij_*d2Rij_detaikdetail);
+                    end
+                    
+                    d2li_detai2(k,l) = -1/2 * sum(terms) - Omega_(k,l);
+                end
+            end
+            
+            % Eq 47 eta deriv selection term
+            detai_detai = eye(neta); % TODO: check this
+            
+            % Eq 47
+            d2li_detaidtheta = zeros(neta,ntheta);
+            for k = 1:neta
+                for m = 1:ntheta
+                    dOmega_dthetam = squeeze(dOmega_dtheta(:,:,m));
+                    
+                    terms = zeros(ni,1);
+                    for j = 1:ni
+                        epsij                 = squeeze(epsi(:,j));
+                        Rij_                  = squeeze(Ri_(:,:,j));
+                        depsij_dthetam        = squeeze(depsi_dtheta(:,m,j));
+                        depsij_detaik         = squeeze(depsi_detai(:,k,j));
+                        dRij_dthetam          = squeeze(dRi_dtheta(:,:,m,j));
+                        dRij_detaik           = squeeze(dRi_detai(:,:,k,j));
+                        d2epsij_detaikdthetam = squeeze(d2epsi_detaidtheta(:,k,m,j));
+                        d2Rij_detaikdthetam   = squeeze(d2Ri_detaidtheta(:,:,k,m,j));
+                        detai_detaik          = squeeze(detai_detai(:,k));
+                        
+                        terms(j) = 2*depsij_dthetam'*Rij_*depsij_detaik - 2*epsij'*Rij_*dRij_dthetam*Rij_*depsij_detaik + ...
+                            2*epsij'*Rij_*d2epsij_detaikdthetam - epsij'*Rij_*d2Rij_detaikdthetam*Rij_*epsij + ...
+                            2*epsij'*Rij_*dRij_detaik*Rij_*dRij_dthetam*Rij_*epsij - ...
+                            2*epsij'*Rij_*dRij_detaik*Rij_*depsij_dthetam + ...
+                            trace(Rij_*dRij_dthetam*Rij_*dRij_detaik + Rij_*d2Rij_detaikdthetam) - ...
+                            etai'*Omega_*dOmega_dthetam*Omega_*detai_detaik;
+                    end
+                    
+                    d2li_detaidtheta(k,m) = -1/2 * sum(terms) - etai'*dOmega_dthetam*Omega_*detai_detaik;
+                end
+            end
+            
+            % Eq 46 for Eq 33 and Eq 35
+            detaistar_dtheta = -inv(d2li_detai2)*d2li_detaidtheta; % neta x ntheta matrix, no time dependence
+            
+            % Eq 46 corresponding to eta for Eq 35 corresponding to Rij
+            detaistar_deta = eye(neta); % neta x neta matrix, no time dependence, selects eta
+            
+            depsistar_dtheta = zeros(nh,ntheta,ni);
+            dRistar_dtheta   = zeros(nh,nh,ntheta,ni);
+            dRistar_detai    = zeros(nh,nh,neta,ni);
+            for j = 1:ni
+                
+                dRij_detai   = reshape(dRi_detai(:,:,:,j), nh,nh,neta);
+                
+                for m = 1:ntheta
+                    
+                    detaistar_dthetam = squeeze(detaistar_dtheta(:,m));
                     
                     % Eq 33
+                    depsij_dthetam    = squeeze(depsi_dtheta(:,m,j));
                     depsij_detai      = squeeze(depsi_detai(:,:,j));
-                    detaistar_dthetam = squeeze(detaistar_dtheta(:,m,j));
-                    depsijstar_dthetam = depsij_dthetam + depsij_detai*detaistar_dthetam;
+                    depsistar_dtheta(:,m,j) = depsij_dthetam + depsij_detai*detaistar_dthetam;
                     
                     % Eq 35
-                    dRijstar_dthetam = dRij_dthetam + dRij_detai*detaistar_dthetam;
+                    dRij_dthetam = squeeze(dRi_dtheta(:,:,m,j));
+                    dRistar_dtheta(:,:,m,j) = dRij_dthetam + tprod(dRij_detai, [1,2,-1], detaistar_dthetam, [-1]);
+                end
+                
+                for k = 1:neta
                     
-                    % Inside sum in Eq 28
-                    dli_dthetamj = 2*epsij'*Rij_*depsij_dthetam - epsij'*Rij_*dRij_dthetam*Rij_*epsij + trace(Rij_*dRij_dthetam);
-                    
-                    % Assume
-                    dRijstar_dthetam = dRij_dthetam;
-                    dRijstar_detai = dRi_detai;
-                    
-                    % Eq 31
-                    dBstar_dtheta(:,:,m,j) = -2*Rijstar_*dRijstar_dthetam*Rijstar_;
-                    
+                    % Eq 35 corresponding to Rij
+                    dRij_detaik     = squeeze(dRi_detai(:,:,k,j));
+                    detaistar_detak = squeeze(detaistar_deta(:,k));
+                    dRistar_detai(:,:,k,j) = dRij_detaik + tprod(dRij_detai, [1,2,-1], detaistar_detak, [-1]);
+                end
+            end
+            
+            d_dtheta_depsistar_detai = zeros(nh,ntheta,neta,ni);
+            d_dtheta_dRistar_detai   = zeros(nh,nh,ntheta,neta,ni);
+            for j = 1:ni
+                for m = 1:ntheta
                     for k = 1:neta
-                        dRijstar_detaik = dRijstar_detai{k,j};
                         
-                        depsijstar_dthetam = [];
+                        pdh_dxij           = squeeze(pdh_dxi(:,:,j));
+                        pdRij_dxij         = reshape(pdRi_dxi(:,:,:,j), nh,nh,nx);
+                        pd2h_detaikdxij    = reshape(pd2h_detaidxi(:,k,:,j), nh,nx);
+                        pd2Rij_detaikdxij  = reshape(pd2Ri_detaidxi(:,:,k,:,j), nh,nh,nx);
+                        pd2h_dxij2         = reshape(pd2h_dxi2(:,:,:,j), nh,nx,nx);
+                        pd2Rij_dxij2       = reshape(pd2Ri_dxi2(:,:,:,:,j), nh,nh,nx,nx);
+                        dxij_detaik        = squeeze(dxi_detai(:,k,j));
                         
-                        
-                        
-                        %                     % In Eq 37
-                        %                     pd2h_dxij2 = zeros(nh);
-                        %                     for ih = 1:nh
-                        %                         for jh = 1:nh
-                        %
-                        %                         end
-                        %                     end
-                        %
-                        %                     pd2h_dxijdthetam = [];
-                        %
-                        %
-                        %
-                        %
-                        %
-                        %                     pd2h_detaikdxij = [];
-                        %
-                        %                     pd2h_detaijdetail = [];
-                        
+                        eq37terms = zeros(nh,neta);
+                        eq37Rijterms = zeros(nh,nh,neta);
+                        for l = 1:neta
+                            
+                            dxij_detail        = squeeze(dxi_detai(:,l,j));
+                            d2xij_detaikdetail = squeeze(d2xi_detaidetai(:,k,l,j));
+                            detailstar_dthetam = squeeze(detaistar_dtheta(l,m));
+                            
+                            pd2h_detaikdetail  = squeeze(pd2h_detaidetai(:,k,l,j));
+                            pd2h_dxijdetail    = squeeze(pd2h_dxidetai(:,:,l,j));
+                            
+                            eq37terms(:,l) = (pd2h_detaikdetail + pd2h_detaikdxij*dxij_detail + ...
+                                (pd2h_dxijdetail + tprod(pd2h_dxij2, [1,2,-1], dxij_detail, [-1]))*dxij_detaik + ...
+                                pdh_dxij*d2xij_detaikdetail)*detailstar_dthetam;
+                            
+                            pd2Rij_detaikdetail = squeeze(pd2Ri_detaidetai(:,:,k,l,j));
+                            pd2Rij_dxijdetail   = reshape(pd2Ri_dxidetai(:,:,:,l,j), nh,nh,nx);
+                            
+                            eq37Rijterms(:,:,l) = (pd2Rij_detaikdetail + tprod(pd2Rij_detaikdxij, [1,2,-1], dxij_detail, [-1]) + ...
+                                tprod((pd2Rij_dxijdetail + tprod(pd2Rij_dxij2, [1,2,3,-1], dxij_detail, [-1])), [1,2,-1], dxij_detaik, [-1]) + ...
+                                tprod(pdRij_dxij, [1,2,-1], d2xij_detaikdetail, [-1]))*detailstar_dthetam;
+                        end
                         
                         % Eq 37
-                        d_dthetam_depsijstar_detaik = [];
+                        d_dtheta_depsistar_detai(:,m,k,j) = squeeze(d2epsi_detaidtheta(:,k,m,j)) + sum(eq37terms,2); % first term already has the negative sign
                         
+                        % Eq 37 corresponding Rij
+                        d_dtheta_dRistar_detai(:,:,m,k,j) = squeeze(d2Ri_detaidtheta(:,:,k,m,j)) + sum(eq37Rijterms,3);
+                    end
+                end
+            end
+            
+            dastar_dtheta = zeros(nh,neta,ntheta,ni);
+            dBstar_dtheta = zeros(nh,nh,ntheta,ni);
+            dcstar_dtheta = zeros(nh,nh,neta,ntheta,ni);
+            for j = 1:ni
+                
+                Rijstar_ = squeeze(Ristar_(:,:,j));
+                
+                for m = 1:ntheta
+                    
+                    dRijstar_dthetam = squeeze(dRistar_dtheta(:,:,m,j));
+                    
+                    for k = 1:neta
                         
-                        % Assume
-                        epsijstar = epsij;
+                        d_dthetam_depsijstar_detaik = squeeze(d_dtheta_depsistar_detai(:,m,k,j));
+                        d_dthetam_dRijstar_detaik   = squeeze(d_dtheta_dRistar_detai(:,:,m,k,j));
+                        depsijstar_dthetam          = squeeze(depsistar_dtheta(:,m,j));
+                        dRijstar_detaik             = squeeze(dRistar_detai(:,:,k,j));
+                        epsijstar                   = squeeze(epsistar(:,j));
                         
                         % Eq 30
                         dastar_dtheta(:,k,m,j) = d_dthetam_depsijstar_detaik' - depsijstar_dthetam'*Rijstar_*dRijstar_detaik + ...
                             epsijstar'*Rijstar_*dRijstar_dthetam*Rijstar_*dRijstar_detaik - ...
-                            epsijstar'*Rijstar_*d_dtheta_dRijstar_detaik;
-                        
-                        d_dtheta_dRijstar_detaik = []; % exercise bottom p196
+                            epsijstar'*Rijstar_*d_dthetam_dRijstar_detaik;
                         
                         % Eq 32
                         dcstar_dtheta(:,:,k,m,j) = -Rijstar_*dRijstar_dthetam*Rijstar_*dRijstar_detaik + ...
-                            Rijstar_*d_dtheta_dRijstar_detaik;
-                        
-                        
-                        
-                        
+                            Rijstar_*d_dthetam_dRijstar_detaik;
                     end
                     
+                    % Eq 31
+                    dBstar_dtheta(:,:,m,j) = -2*Rijstar_*dRijstar_dthetam*Rijstar_;
                 end
-                
-                
-                
-            end % for j = 1:ni
-            
-
-            
-
-            
-
-            
+            end
             
             % Eq 28
-            %   Terms inside sum dli_dthetamj are above
             dli_dtheta = zeros(ntheta,1);
             for m = 1:ntheta
-                dli_dthetam = -1/2 * sum(dli_dthetamj) + ...
+                
+                eq28terms = zeros(ni,1); % scalar
+                for j = 1:ni
+                    epsijstar          = squeeze(epsistar(:,j));
+                    Rijstar_           = squeeze(Ristar_(:,:,j));
+                    depsijstar_dthetam = squeeze(depsistar_dtheta(:,m,j));
+                    dRijstar_dthetam   = squeeze(dRistar_dtheta(:,:,m,j));
+                    
+                    eq28terms(j) = 2*epsijstar'*Rijstar_*depsijstar_dthetam - ...
+                        epsijstar'*Rijstar_*dRijstar_dthetam*Rijstar_*epsijstar + ...
+                        trace(Rijstar_*dRijstar_dthetam);
+                end
+                
+                dOmega_dthetam = squeeze(dOmega_dtheta(:,:,m));
+                
+                dli_dtheta(m) = -1/2 * sum(eq28terms) + ...
                     1/2 * etai'*Omega_*dOmega_dthetam*Omega_*etai - ...
                     1/2 * trace(Omega_*dOmega_dthetam);
-                dli_dtheta(m) = dli_dthetam;
             end
             
             % Eq 29
-            dHi_dthetam = zeros(neta,neta,ntheta);
+            dHi_dtheta = zeros(neta,neta,ntheta);
             for k = 1:neta
                 for l = 1:neta
                     for m = 1:ntheta
-                        dHikl = zeros(ni,1);
+                        dHikl = zeros(ni,1); % term inside the sum
                         for j = 1:ni
                             dalstar_dthetamj = squeeze(dastar_dtheta(:,l,m,j));
                             dakstar_dthetamj = squeeze(dastar_dtheta(:,k,m,j));
@@ -723,21 +890,25 @@ obj = pastestruct(objectiveZero(), obj);
                                 alstarj*Bstarj*dakstar_dthetamj' + ...
                                 trace(-dclstar_dthetamj*ckstarj - clstarj*dckstar_dthetamj);
                         end
-                        dHi_dthetam(k,l,m) = -1/2 * sum(dHikl) - dOmegakl_dthetam_;
+                        
+                        dOmegakl_dthetam_ = squeeze(dOmega_dtheta_(k,l,m));
+                        
+                        dHi_dtheta(k,l,m) = -1/2 * sum(dHikl) - dOmegakl_dthetam_;
                     end
                 end
             end
             
             % Eq 23, for each patient
             Hi_ = inv(Hi);
-            dlogLFi_dthetam = dli_dthetam - 1/2 * trace(Hi_*dHi_dthetam);
-            
-            dGdk(m) = dlogLFi_dthetam;
-            
-            for j = 1:ni
-                
-                
+            dlogLFi_dthetam = zeros(ntheta,1);
+            for m = 1:ntheta
+                dHi_dthetam = squeeze(dHi_dtheta(:,:,m));
+                dlogLFi_dthetam(m) = dli_dtheta(m) - 1/2 * trace(Hi_*dHi_dthetam);
             end
+            
+            % Assign output obj fun gradient
+            dGdk = dlogLFi_dthetam
+            
         end
         
     end

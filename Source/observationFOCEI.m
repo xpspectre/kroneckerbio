@@ -118,7 +118,9 @@ obj = pastestruct(objectiveZero(), obj);
 %       filling in values for partial derivatives denoted by starting with p
 %   assume Rij is diagonal
 %       but maintain it as a matrix for various operations
-%   dOmega_dtheta = 0 assumed for now
+%   dOmega_dtheta = 0 assumed for now\
+%   Careful with squeezing/reshaping Ri with single output when tensor is needed - will remove extra singleton dims
+%       Only call squeeze when colons are adjacent and in order, else call reshape
     function [val, discrete] = calcParts(int, order)
         % All terms with star are evaluated at optimal eta star (same as eta in FO method)
         % Inputs:
@@ -169,7 +171,7 @@ obj = pastestruct(objectiveZero(), obj);
             epsi        = zeros(nh,ni);
             
             Ri          = zeros(nh,nh,ni);
-            Ri_         = Ri;
+            Ri_         = zeros(nh,nh,ni);
             
             pdh_detai   = zeros(nh,neta,ni);
             pdh_dxi     = zeros(nh,nx,ni);
@@ -177,14 +179,7 @@ obj = pastestruct(objectiveZero(), obj);
             pdRi_dxi    = zeros(nh,nh,nx,ni);
             dxi_detai   = zeros(nx,neta,ni);
             
-            depsi_detai = zeros(nh,neta,ni);
-            dRi_detai   = zeros(nh,nh,neta,ni);
-            
-            a           = zeros(nh,neta,ni);
-            B           = zeros(nh,nh,ni);
-            c           = zeros(nh,nh,neta,ni);
-            
-            for j = 1:ni %%%DEBUG%%%
+            for j = 1:ni
                 
                 % Eq 5
                 %   Measurements is a ni x nh matrix (transposed from everything else)
@@ -201,19 +196,15 @@ obj = pastestruct(objectiveZero(), obj);
                 pdydkj = int.dydk([], int.x(:,j), int.u(:,j));
                 
                 % Get Ri, intra-individual variability model covariance matrix
-                %   Assume Rij is diagonal
+                % Get inverse of Ri once for convenience
+                %   Note: Assume Rij is diagonal
                 Rij = zeros(nh);
                 for ih = 1:nh
                     Rij(ih,ih) = int.y(RiInds(ih),j);
                 end
-                Ri(:,:,j) = Rij;
-                
-                % Get inverse of Ri once for convenience
                 Rij_ = inv(Rij);
+                Ri(:,:,j) = Rij;
                 Ri_(:,:,j) = Rij_;
-                
-                % Eq 16
-                B(:,:,j) = 2*Rij_;
                 
                 % In Eq 19
                 pdh_detaik = zeros(nh,neta);
@@ -266,7 +257,15 @@ obj = pastestruct(objectiveZero(), obj);
             %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
             % Calculate G
             %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            for j = 1:ni %%%DEBUG%%%
+            
+            a           = zeros(nh,neta,ni);
+            B           = zeros(nh,nh,ni);
+            c           = zeros(nh,nh,neta,ni);
+            
+            depsi_detai = zeros(nh,neta,ni);
+            dRi_detai   = zeros(nh,nh,neta,ni);
+            
+            for j = 1:ni
                 for k = 1:neta
                     
                     % Eq 19
@@ -277,7 +276,6 @@ obj = pastestruct(objectiveZero(), obj);
                     depsi_detai(:,k,j) = depsij_detaik;
                     
                     % Eq 20
-                    % Careful with squeezing/reshaping Ri with single output when tensor is needed - will remove extra singleton dims
                     pdRij_detaik = squeeze(pdRi_detai(:,:,k,j));
                     pdRij_dxij   = reshape(pdRi_dxi(:,:,:,j), nh,nh,nx);
                     dRij_detaik = pdRij_detaik + tprod(pdRij_dxij, [1,2,-1], dxij_detaik, [-1]); % contract on xi
@@ -287,6 +285,9 @@ obj = pastestruct(objectiveZero(), obj);
                     epsij = squeeze(epsi(:,j));
                     Rij_  = squeeze(Ri_(:,:,j));
                     a(:,k,j) = depsij_detaik' - epsij'*Rij_*dRij_detaik;
+                    
+                    % Eq 16
+                    B(:,:,j) = 2*Rij_;
                     
                     % Eq 17
                     c(:,:,k,j) = Rij_*dRij_detaik;
@@ -340,10 +341,10 @@ obj = pastestruct(objectiveZero(), obj);
             
             % Eq 18, for each patient
             logLFi = li - 1/2 * log(det(-Hi/(2*pi))); % Almquist
-            %             logLFi = li - 1/2 * log(det(-Hi_tilde/(2*pi))); % NONMEM
+%             logLFi = li - 1/2 * log(det(-Hi_tilde/(2*pi))); % NONMEM
             
             val = logLFi
-            %             val = -2*logLFi % NONMEM minimizes -2loglikelihood
+%             val = -2*logLFi % NONMEM minimizes -2loglikelihood
             discrete = 0;
         end
         
@@ -354,7 +355,7 @@ obj = pastestruct(objectiveZero(), obj);
             % Assemble dGdk components
             %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
             
-            % Assume
+            % Assume/TODO - these may be just the correct values when int is reevaluated at etastar
             Ristar  = Ri;
             Ristar_ = Ri_;
             Rijstar = Rij;
@@ -388,7 +389,6 @@ obj = pastestruct(objectiveZero(), obj);
             d2xi_detaidetai = zeros(nx,neta,neta,ni);
             
             for j = 1:ni
-                
                 
                 % In Eq 34
                 pdh_dthetaj = zeros(nh,ntheta);
@@ -571,7 +571,7 @@ obj = pastestruct(objectiveZero(), obj);
             % Calculate dGdk
             %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
             
-            % Assume
+            % Assume/TODO - these may be just the correct values when int is reevaluated at etastar
             epsistar = epsi;
             astar = a;
             Bstar = B;
@@ -732,7 +732,7 @@ obj = pastestruct(objectiveZero(), obj);
             detaistar_dtheta = -inv(d2li_detai2)*d2li_detaidtheta; % neta x ntheta matrix, no time dependence
             
             % Eq 46 corresponding to eta for Eq 35 corresponding to Rij
-            detaistar_deta = eye(neta); % neta x neta matrix, no time dependence, selects eta
+            detaistar_deta = eye(neta); % neta x neta matrix, no time dependence, selects eta - TODO/check this
             
             depsistar_dtheta = zeros(nh,ntheta,ni);
             dRistar_dtheta   = zeros(nh,nh,ntheta,ni);
@@ -900,14 +900,14 @@ obj = pastestruct(objectiveZero(), obj);
             
             % Eq 23, for each patient
             Hi_ = inv(Hi);
-            dlogLFi_dthetam = zeros(ntheta,1);
+            dlogLFi_dtheta = zeros(ntheta,1);
             for m = 1:ntheta
                 dHi_dthetam = squeeze(dHi_dtheta(:,:,m));
-                dlogLFi_dthetam(m) = dli_dtheta(m) - 1/2 * trace(Hi_*dHi_dthetam);
+                dlogLFi_dtheta(m) = dli_dtheta(m) - 1/2 * trace(Hi_*dHi_dthetam);
             end
             
             % Assign output obj fun gradient
-            dGdk = dlogLFi_dthetam
+            dGdk = dlogLFi_dtheta
             
         end
         

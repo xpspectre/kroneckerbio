@@ -20,9 +20,9 @@ nIds = 3; % Testing: subset of patients for now
 
 %% Load model
 % Model contains nominal dose of 320 mg
-% m = theo_model;
+m = theo_model;
 % save('theo_model.mat', 'm');
-load('theo_model.mat');
+% load('theo_model.mat');
 
 fit.addModel(m);
 

@@ -1,8 +1,8 @@
-function obs = observationFOCEI(output, timelist, method, name)
+function obs = observationFOCEI(outputs, timelist, method, name)
 % Nonlinear mixed effects observation and objective function for a patient
 %
 % Inputs:
-%   output [ string | cell array of strings ]
+%   outputs [ string | cell array of strings ]
 %       Name of output{s} of interest
 %   timelist [ nt x 1 vector of nonnegative doubles ]
 %       Vector of times of interest
@@ -14,8 +14,9 @@ function obs = observationFOCEI(output, timelist, method, name)
 %   obj [ Objective.NLME struct ]
 %       Observation struct
 %
-% Note/TODO: Currently only supports a single output. Extend to use an arbitrary
-% number of outputs later.
+% Notes:
+%   Although it supports multiple outputs/measuremets per individual, they have
+%   to be at the same times (for now)
 
 % Clean up inputs
 if nargin < 4
@@ -33,8 +34,8 @@ if isempty(name)
 end
 
 % Clean up outputs
-output = fixOutputName(output);
-nOutputs = length(output);
+outputs = fixOutputName(outputs);
+nOutputs = length(outputs);
 
 % Find unique timelist
 discrete_times = row(unique(timelist));
@@ -46,7 +47,7 @@ obs.Complex = false;
 
 obs.tF            = max([0, discrete_times]);
 obs.DiscreteTimes = discrete_times;
-obs.Outputs       = output;
+obs.Outputs       = outputs;
 
 obs.Simulation = @simulation;
 obs.Objective  = @objective;
@@ -56,28 +57,33 @@ obs = pastestruct(observationZero(), obs);
     function sim = simulation(int)
         sim.Type = 'Simulation.Data.FOCEI';
         sim.Name = name;
-        sim.Output = output;
+        sim.Output = outputs;
         sim.Times = discrete_times;
         
-        y_Ind = lookupOutput(output, int); % take actual output being compared to measurements (w/ error model from eps)
+        y_Ind = lookupOutput(outputs, int); % take actual output being compared to measurements (w/ error model from eps)
         sim.Predictions = int.y(y_Ind,:);
     end
 
     function obj = objective(measurements)
-        obj = objectiveNLME(output, timelist, measurements, method, name);
+        obj = objectiveNLME(outputs, timelist, measurements, method, name);
     end
 
 end
 
-function obj = objectiveNLME(output, timelist, measurements, method, name)
+function obj = objectiveNLME(outputs, timelist, measurements, method, name)
 % Inputs:
-%   output
-%   timelist
-%   measurements [ ni x nOutpus matrix of doubles ]
+%   outputs [ string | nOutputs cell array of strings ]
+%   timelist [ ni double vector ]
+%   measurements [ ni x nOutputs double matrix ]
+%   method
+%   name
+%
+% Outupts:
+%   obj [ objective function struct ]
 
 % Clean up outputs
-output = fixOutputName(output);
-nOutputs = length(output);
+outputs = fixOutputName(outputs);
+nOutputs = length(outputs);
 
 % Find unique timelist
 discrete_times = row(unique(timelist));
@@ -86,7 +92,7 @@ discrete_times = row(unique(timelist));
 assert(all(size(measurements) == [length(timelist), nOutputs]), 'objectiveFOCEI:invalidMeasurements', 'Dimensions of measurements don''t match nTimes and/or nOutputs')
 
 % Inherit observation
-obj = observationFOCEI(output, timelist, method, name);
+obj = observationFOCEI(outputs, timelist, method, name);
 
 obj.Type = 'Objective.Data.NLME';
 obj.Continuous = false;
@@ -121,6 +127,10 @@ obj = pastestruct(objectiveZero(), obj);
 %   dOmega_dtheta = 0 assumed for now\
 %   Careful with squeezing/reshaping Ri with single output when tensor is needed - will remove extra singleton dims
 %       Only call squeeze when colons are adjacent and in order, else call reshape
+%   Fixed effects parameters = Theta, random effects parameters = Eta
+%       Omega and Sigma are included in Theta
+%       Omega is pulled out separately for convenience for a couple terms
+%       Sigma is wholly included in Omega
     function [val, discrete] = calcParts(int, order)
         % All terms with star are evaluated at optimal eta star (same as eta in FO method)
         % Inputs:
@@ -137,8 +147,6 @@ obj = pastestruct(objectiveZero(), obj);
             fprintf('Calculating obj fun and grad with 1st order sensitivities\n')
         end
         
-        %         m = int.m; % may just add the handles to int directly instead of models
-        
         %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         % Get common components
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -148,15 +156,22 @@ obj = pastestruct(objectiveZero(), obj);
         nT = int.nT;
         
         % Indexing
-        [RiInds, hInds, errInds] = getOutputInds(int.y_names);
+        [hInds, RiInds, RiPos] = getOutputInds(int.y_names, outputs);
         nh = length(hInds);
-        [thetaInds, etaInds, omegaInds, sigmaInds] = getNLMEInds(int.k_names); % no more eps
+        nRi = length(RiInds);
+        
+        [thetaInds, etaInds, omegaInds, omegaPos] = getParameterInds(int.k_names);
         ntheta = length(thetaInds);
         neta = length(etaInds);
         
-        Omega = getOmega(int.k, int.k_names, thetaInds, omegaInds);
-        Omega = Omega.^2; % TODO: variances are omegas squared?
+        [Omega, dOmega_dtheta] = getOmega(omegaInds, omegaPos, int.k, thetaInds);
+        
+        % Calculate Omega inverses for convenience
         Omega_ = inv(Omega);
+        dOmega_dtheta_ = zeros(size(dOmega_dtheta)); % TODO: may need to handle this symbolically somehow - possibly by going full expansion - leave as 0 for now
+%         for m = 1:ntheta
+%             dOmega_dtheta_(:,:,m) = inv(squeeze(dOmega_dtheta(:,:,m)));
+%         end
         
         etai = int.k(etaInds);
         
@@ -197,13 +212,15 @@ obj = pastestruct(objectiveZero(), obj);
                 
                 % Get Ri, intra-individual variability model covariance matrix
                 % Get inverse of Ri once for convenience
-                %   Note: Assume Rij is diagonal
                 Rij = zeros(nh);
-                for ih = 1:nh
-                    Rij(ih,ih) = int.y(RiInds(ih),j);
+                for iRi = 1:nRi
+                    ih = RiPos(iRi,1);
+                    jh = RiPos(iRi,2);
+                    Rij(ih,jh) = int.y(RiInds(iRi),j);
+                    Rij(jh,ih) = int.y(RiInds(iRi),j);
                 end
                 Rij_ = inv(Rij);
-                Ri(:,:,j) = Rij;
+                Ri(:,:,j)  = Rij;
                 Ri_(:,:,j) = Rij_;
                 
                 % In Eq 19
@@ -226,18 +243,24 @@ obj = pastestruct(objectiveZero(), obj);
                 
                 % In Eq 20
                 pdRij_detaik = zeros(nh,nh,neta);
-                for ih = 1:nh
+                for iRi = 1:nRi
+                    ih = RiPos(iRi,1);
+                    jh = RiPos(iRi,2);
                     for k = 1:neta
-                        pdRij_detaik(ih,ih,k) = pdydkj(RiInds(ih),etaInds(k));
+                        pdRij_detaik(ih,jh,k) = pdydkj(RiInds(iRi),etaInds(k));
+                        pdRij_detaik(jh,ih,k) = pdydkj(RiInds(iRi),etaInds(k));
                     end
                 end
                 pdRi_detai(:,:,:,j) = pdRij_detaik;
                 
                 % In Eq 20
                 pdRij_dxij = zeros(nh,nh,nx);
-                for ih = 1:nh
+                for iRi = 1:nRi
+                    ih = RiPos(iRi,1);
+                    jh = RiPos(iRi,2);
                     for ix = 1:nx
-                        pdRij_dxij(ih,ih,ix) = pdydxj(RiInds(ih),ix);
+                        pdRij_dxij(ih,jh,ix) = pdydxj(RiInds(iRi),ix);
+                        pdRij_dxij(jh,ih,ix) = pdydxj(RiInds(iRi),ix);
                     end
                 end
                 pdRi_dxi(:,:,:,j) = pdRij_dxij;
@@ -301,8 +324,8 @@ obj = pastestruct(objectiveZero(), obj);
                 for l = 1:neta
                     Hikl = zeros(ni,1);
                     for j = 1:ni
-                        al = squeeze(a(:,l,j));
-                        ak = squeeze(a(:,k,j));
+                        al = reshape(a(:,l,j), 1,nh);
+                        ak = reshape(a(:,k,j), 1,nh);
                         Bj = squeeze(B(:,:,j));
                         cl = squeeze(c(:,:,l,j));
                         ck = squeeze(c(:,:,k,j));
@@ -358,10 +381,6 @@ obj = pastestruct(objectiveZero(), obj);
             % Assume/TODO - these may be just the correct values when int is reevaluated at etastar
             Ristar  = Ri;
             Ristar_ = Ri_;
-            Rijstar = Rij;
-            Rijstar_ = Rij_;
-            dOmega_dtheta = zeros(neta,neta,ntheta); % assume
-            dOmega_dtheta_ = zeros(neta,neta,ntheta); % assume (calculated from inv of Omega, then set to 0)
             
             pdh_dtheta = zeros(nh,ntheta,ni); % depends on time
             pdRi_dtheta = zeros(nh,nh,ntheta,ni);
@@ -401,9 +420,12 @@ obj = pastestruct(objectiveZero(), obj);
                 
                 % In Eq 35
                 pdRij_dtheta = zeros(nh,nh,ntheta);
-                for ih = 1:nh
+                for iRi = 1:nRi
+                    ih = RiPos(iRi,1);
+                    jh = RiPos(iRi,2);
                     for m = 1:ntheta
-                        pdRij_dtheta(ih,ih,m) = pdydkj(hInds(ih),thetaInds(m));
+                        pdRij_dtheta(ih,jh,m) = pdydkj(RiInds(iRi),thetaInds(m));
+                        pdRij_dtheta(jh,ih,m) = pdydkj(RiInds(iRi),thetaInds(m));
                     end
                 end
                 pdRi_dtheta(:,:,:,j) = pdRij_dtheta;
@@ -433,110 +455,171 @@ obj = pastestruct(objectiveZero(), obj);
                 
                 % In Eq 37
                 pd2h_detaidtheta   = zeros(nh,neta,ntheta);
-                pd2Rij_detaidtheta = zeros(nh,nh,neta,ntheta);
                 for ih = 1:nh
                     for k = 1:neta
                         for m = 1:ntheta
                             etaInd = etaInds(k);
                             hthetaInd = ny*(thetaInds(m)-1) + hInds(ih);
-                            RithetaInd = ny*(thetaInds(m)-1) + RiInds(ih);
-                            
                             pd2h_detaidtheta(ih,k,m) = pd2ydk2j(hthetaInd,etaInd);
-                            pd2Rij_detaidtheta(ih,ih,k,m) = pd2ydk2j(RithetaInd,etaInd);
                         end
                     end
                 end
                 pd2h_detaidtheta(:,:,:,j) = pd2h_detaidtheta;
+                
+                pd2Rij_detaidtheta = zeros(nh,nh,neta,ntheta);
+                for iRi = 1:nRi
+                    ih = RiPos(iRi,1);
+                    jh = RiPos(iRi,2);
+                    for k = 1:neta
+                        for m = 1:ntheta
+                            etaInd = etaInds(k);
+                            RithetaInd = ny*(thetaInds(m)-1) + RiInds(iRi);
+                            
+                            pd2Rij_detaidtheta(ih,jh,k,m) = pd2ydk2j(RithetaInd,etaInd);
+                            pd2Rij_detaidtheta(jh,ih,k,m) = pd2ydk2j(RithetaInd,etaInd);
+                        end
+                    end
+                end
                 pd2Ri_detaidtheta(:,:,:,:,j) = pd2Rij_detaidtheta;
                 
                 % In Eq 37
                 pd2h_detaidxij = zeros(nh,neta,nx);
-                pd2Rij_detaidxij = zeros(nh,nh,neta,nx);
                 for ih = 1:nh
                     for k = 1:neta
                         for ix = 1:nx
                             etaInd = etaInds(k);
                             hxInd = ny*(ix-1) + hInds(ih);
-                            RixInd = ny*(ix-1) + RiInds(ih);
-                            
                             pd2h_detaidxij(ih,k,ix) = pd2ydkdxj(hxInd,etaInd);
-                            pd2Rij_detaidxij(ih,ih,k,ix) = pd2ydkdxj(RixInd,etaInd);
                         end
                     end
                 end
                 pd2h_detaidxi(:,:,:,j) = pd2h_detaidxij;
+                
+                pd2Rij_detaidxij = zeros(nh,nh,neta,nx);
+                for iRi = 1:nRi
+                    ih = RiPos(iRi,1);
+                    jh = RiPos(iRi,2);
+                    for k = 1:neta
+                        for ix = 1:nx
+                            etaInd = etaInds(k);
+                            RixInd = ny*(ix-1) + RiInds(iRi);
+                            pd2Rij_detaidxij(ih,jh,k,ix) = pd2ydkdxj(RixInd,etaInd);
+                            pd2Rij_detaidxij(jh,ih,k,ix) = pd2ydkdxj(RixInd,etaInd);
+                        end
+                    end
+                end
                 pd2Ri_detaidxi(:,:,:,:,j) = pd2Rij_detaidxij;
                 
                 % In Eq 37
                 pd2h_dxijdtheta = zeros(nh,nx,ntheta);
-                pd2Rij_dxijdtheta = zeros(nh,nh,nx,ntheta);
                 for ih = 1:nh
                     for ix = 1:nx
                         for m = 1:ntheta
                             xInd = ix;
                             hthetaInd = ny*(thetaInds(m)-1) + hInds(ih);
-                            RithetaInd = ny*(thetaInds(m)-1) + RiInds(ih);
-                            
-                            pd2h_dxijdtheta(nh,nx,ntheta) = pd2ydxdkj(hthetaInd,xInd);
-                            pd2Rij_dxijdtheta(nh,nh,nx,ntheta) = pd2ydxdkj(RithetaInd,xInd);
+                            pd2h_dxijdtheta(ih,ix,m) = pd2ydxdkj(hthetaInd,xInd);
                         end
                     end
                 end
                 pd2h_dxidtheta(:,:,:,j) = pd2h_dxijdtheta;
+                
+                pd2Rij_dxijdtheta = zeros(nh,nh,nx,ntheta);
+                for iRi = 1:nRi
+                    ih = RiPos(iRi,1);
+                    jh = RiPos(iRi,2);
+                    for ix = 1:nx
+                        for m = 1:ntheta
+                            xInd = ix;
+                            RithetaInd = ny*(thetaInds(m)-1) + RiInds(iRi);
+                            pd2Rij_dxijdtheta(ih,jh,ix,m) = pd2ydxdkj(RithetaInd,xInd);
+                            pd2Rij_dxijdtheta(jh,ih,ix,m) = pd2ydxdkj(RithetaInd,xInd);
+                        end
+                    end
+                end
                 pd2Ri_dxidtheta(:,:,:,:,j) = pd2Rij_dxijdtheta;
                 
                 % In Eq 37
                 pd2h_dxij2 = zeros(nh,nx,nx);
-                pd2Rij_dxij2 = zeros(nh,nh,nx,nx);
                 for ih = 1:nh
                     for ix = 1:nx
                         for jx = 1:nx
                             xInd = ix;
                             hxInd = ny*(jx-1) + hInds(ih);
-                            RixInd = ny*(jx-1) + RiInds(ih);
-                            
                             pd2h_dxij2(ih,ix,jx) = pd2ydx2j(hxInd,xInd);
-                            pd2Rij_dxij2(ih,ih,ix,jx) = pd2ydx2j(RixInd,xInd);
                         end
                     end
                 end
                 pd2h_dxi2(:,:,:,j) = pd2h_dxij2;
+                
+                pd2Rij_dxij2 = zeros(nh,nh,nx,nx);
+                for iRi = 1:nRi
+                    ih = RiPos(iRi,1);
+                    jh = RiPos(iRi,2);
+                    for ix = 1:nx
+                        for jx = 1:nx
+                            xInd = ix;
+                            RixInd = ny*(jx-1) + RiInds(iRi);
+                            pd2Rij_dxij2(ih,jh,ix,jx) = pd2ydx2j(RixInd,xInd);
+                            pd2Rij_dxij2(jh,ih,ix,jx) = pd2ydx2j(RixInd,xInd);
+                        end
+                    end
+                end
                 pd2Ri_dxi2(:,:,:,:,j) = pd2Rij_dxij2;
                 
                 % In Eq 37
-                pd2h_detaidetaij = zeros(nh,neta,neta); % depends on time
-                pd2Rij_detaidetai = zeros(nh,nh,neta,neta);
+                pd2h_detaidetaij = zeros(nh,neta,neta);
                 for ih = 1:nh
                     for k = 1:neta
                         for l = 1:neta
                             etaInd = etaInds(k);
                             hetaInd = ny*(etaInds(l)-1) + hInds(ih);
-                            RietaInd = ny*(etaInds(l)-1) + RiInds(ih);
-                            
                             pd2h_detaidetaij(ih,k,l) = pd2ydk2j(hetaInd,etaInd);
-                            pd2Rij_detaidetai(ih,ih,k,l) = pd2ydk2j(RietaInd,etaInd);
                         end
                     end
                 end
                 pd2h_detaidetai(:,:,:,j) = pd2h_detaidetaij;
+                
+                pd2Rij_detaidetai = zeros(nh,nh,neta,neta);
+                for iRi = 1:nRi
+                    ih = RiPos(iRi,1);
+                    jh = RiPos(iRi,2);
+                    for k = 1:neta
+                        for l = 1:neta
+                            etaInd = etaInds(k);
+                            RietaInd = ny*(etaInds(l)-1) + RiInds(iRi);
+                            pd2Rij_detaidetai(ih,jh,k,l) = pd2ydk2j(RietaInd,etaInd);
+                            pd2Rij_detaidetai(jh,ih,k,l) = pd2ydk2j(RietaInd,etaInd);
+                        end
+                    end
+                end
                 pd2Ri_detaidetai(:,:,:,:,j) = pd2Rij_detaidetai;
                 
                 % In Eq 37
                 pd2h_dxijdetai = zeros(nh,nx,neta);
-                pd2Rij_dxijdetai = zeros(nh,nh,nx,neta);
                 for ih = 1:nh
                     for ix = 1:nx
                         for l = 1:neta
                             xInd = ix;
                             hetaInd = ny*(etaInds(l)-1) + hInds(ih);
-                            RietaInd = ny*(etaInds(l)-1) + RiInds(ih);
-                            
                             pd2h_dxijdetai(ih,ix,l) = pd2ydxdkj(hetaInd,xInd);
-                            pd2Rij_dxijdetai(ih,ih,ix,l) = pd2ydxdkj(RietaInd,xInd);
                         end
                     end
                 end
                 pd2h_dxidetai(:,:,:,j) = pd2h_dxijdetai;
+                
+                pd2Rij_dxijdetai = zeros(nh,nh,nx,neta);
+                for iRi = 1:nRi
+                    ih = RiPos(iRi,1);
+                    jh = RiPos(iRi,2);
+                    for ix = 1:nx
+                        for l = 1:neta
+                            xInd = ix;
+                            RietaInd = ny*(etaInds(l)-1) + RiInds(iRi);
+                            pd2Rij_dxijdetai(ih,jh,ix,l) = pd2ydxdkj(RietaInd,xInd);
+                            pd2Rij_dxijdetai(jh,ih,ix,l) = pd2ydxdkj(RietaInd,xInd);
+                        end
+                    end
+                end
                 pd2Ri_dxidetai(:,:,:,:,j) = pd2Rij_dxijdetai;
                 
                 % In Eq 37
@@ -656,7 +739,7 @@ obj = pastestruct(objectiveZero(), obj);
                         
                         pdRij_dxij           = reshape(pdRi_dxi(:,:,:,j), nh,nh,nx);
                         pd2Rij_dxij2         = reshape(pd2Ri_dxi2(:,:,:,:,j), nh,nh,nx,nx);
-                        pd2Rij_dxijdthetam   = squeeze(pd2Ri_dxidtheta(:,:,nx,m,j));
+                        pd2Rij_dxijdthetam   = reshape(pd2Ri_dxidtheta(:,:,:,m,j), nh,nh,nx);
                         pd2Rij_detaikdxij    = reshape(pd2Ri_detaidxi(:,:,k,:,j), nh,nh,nx);
                         pd2Rij_detaikdthetam = squeeze(pd2Ri_detaidtheta(:,:,k,m,j));
                         
@@ -874,12 +957,12 @@ obj = pastestruct(objectiveZero(), obj);
                     for m = 1:ntheta
                         dHikl = zeros(ni,1); % term inside the sum
                         for j = 1:ni
-                            dalstar_dthetamj = squeeze(dastar_dtheta(:,l,m,j));
-                            dakstar_dthetamj = squeeze(dastar_dtheta(:,k,m,j));
+                            dalstar_dthetamj = reshape(dastar_dtheta(:,l,m,j), 1,nh);
+                            dakstar_dthetamj = reshape(dastar_dtheta(:,k,m,j), 1,nh);
                             Bstarj = squeeze(Bstar(:,:,j));
                             dBstar_dthetamj = squeeze(dBstar_dtheta(:,:,m,j));
-                            akstarj = squeeze(astar(:,k,j));
-                            alstarj = squeeze(astar(:,l,j));
+                            akstarj = reshape(astar(:,k,j), 1,nh);
+                            alstarj = reshape(astar(:,l,j), 1,nh);
                             dclstar_dthetamj = squeeze(dcstar_dtheta(:,:,l,m,j));
                             dckstar_dthetamj = squeeze(dcstar_dtheta(:,:,k,m,j));
                             ckstarj = squeeze(cstar(:,:,k,j));
@@ -915,7 +998,7 @@ obj = pastestruct(objectiveZero(), obj);
 
     function [val, discrete] = G(int)
         order = 1;
-        [val, discrete] = calcParts(int, order); %%%DEBUG%%% look at curvature for now
+        [val, discrete] = calcParts(int, order);
         %         val = 0;
         %         discrete = 0;
     end
@@ -952,169 +1035,173 @@ y_Ind    = find(ismember(int.y_names, name));
 Fi_y_Ind = find(ismember(int.y_names, ['Fi__' name]));
 end
 
-function [RiInds, hInds, errInds] = getOutputInds(yNames)
+function [hInds, RiInds, RiPos] = getOutputInds(yNames, outputs)
+% Get indices of output types. Outputs part of Ri have the Ri__.
+% Ri must be a symmetric matrix, whose nonzero lower
+% triangular elements must be copied to the top triangle. Only outputs with
+% corresponding entries in Ri are part of h - other outputs don't have
+% measurements or error models. Sparse - elements missing in Ri that would have
+% a corresponding h like a 0 covariance are skipped and assumed 0.
+%
+% Inputs:
+%   yNames [ cell vector of strings ]
+%       Names of all outputs in models
+%   outputs [ cell vector of strings ]
+%       Names of outputs for measurements in objective function in order
+%
+% Outputs:
+%   hInds [ nh x 1 double vector ]
+%       Position of ih-th h
+%   RiInds [ nh x 1 double vector ]
+%       Position of the k-th Ri
+%   RiPos [ nh x 2 double vector ]
+%       Each row is the (ih,jh)-th position of the corresponding k-th entry
+%       in Ri. The ordering of Ri matches the ordering of h
+
+% Get indices corresponding to h and Ri
 ny = length(yNames);
 RiInds  = zeros(ny,1);
-hInds   = zeros(ny,1);
-errInds = zeros(ny,1);
+hInds    = zeros(ny,1);
 for i = 1:ny
     yName = yNames{i};
-    if ~isempty(regexp(yName, '^Ri__', 'once'))
-        RiInds(i) = i;
-    elseif ~isempty(regexp(yName, '^h__', 'once'))
+    if ismember(yName, outputs);
         hInds(i) = i;
-    elseif ~isempty(regexp(yName, '^err__', 'once'))
-        errInds(i) = i;
-    else
-        % not recognized, ignore
-    end
+    elseif ~isempty(regexp(yName, '^Ri__', 'once'))
+        RiInds(i) = i;
+    end % ignore extraneous non-h, non-Ri outputs
 end
-RiInds(RiInds==0)   = [];
+RiInds(RiInds==0) = [];
 hInds(hInds==0)     = [];
-errInds(errInds==0) = [];
+
+% Get (ih,jh) positions of Ri
+nRi = length(RiInds);
+RiPos = zeros(nRi,2);
+RiNames = yNames(RiInds);
+for i = 1:nRi
+    tokens = regexp(RiNames{i}, '^Ri__(.+)__(.+)$', 'tokens', 'once')';
+    assert(iscell(tokens) && length(tokens) == 2, 'observationNLME:getOutputInds:invalidRiTokens', 'Parser didn''t find correct params Ri name %s is referring to', RiNames{i})
+    ix = find(ismember(outputs, tokens{1}));
+    jx = find(ismember(outputs, tokens{2}));
+    RiPos(i,:) = [ix,jx];
 end
 
-function [thetaInds, etaInds, omegaInds, sigmaInds] = getNLMEInds(kNames)
-% Get indices of NLME components from rate params list
+end
+
+function [thetaInds, etaInds, omegaInds, omegaPos] = getParameterInds(kNames)
+% Get indices of parameter types. omegaInds are a subset of thetaInds and
+%   included separately for convenience. Omega has the same order as Eta.
+%   Any non-Eta parameter is in Omega.
+%
+% Inputs:
+%   kNames [ cell vector of strings ]
+%
+% Outputs:
+%   thetaInds [ ntheta x 1 double vector ]
+%       Position of the m-th theta
+%   etaInds [ neta x 1 double vector ]
+%       Position of the k-th eta
+%   omegaInds [ nomega x 1 double vector ]
+%       Position of the i-th omega
+%   omegaInds [ nomega x 2 double vector ]
+%       Each row is the (iOm,jOm)-th position of the corresponding i-th omega in
+%       Omega. The ordering of Omega matches the ordering of eta.
+%
+% Note/TODO: Omega can be generalized to a matrix of expressions, similar to Ri.
+%   Then Omegas are specified as outputs
+
 nk = length(kNames);
 thetaInds = zeros(nk,1);
-etaInds   = zeros(nk,1);
 omegaInds = zeros(nk,1);
-sigmaInds = zeros(nk,1);
+etaInds   = zeros(nk,1);
 for i = 1:nk
     kName = kNames{i};
-    if ~isempty(regexp(kName, '^eta__', 'once'))
+    if ~isempty(regexp(kName, '^eta__', 'once')) % in Eta
         etaInds(i) = i;
-    elseif ~isempty(regexp(kName, '^omega__', 'once'))
-        omegaInds(i) = i;
-    elseif ~isempty(regexp(kName, '^sigma__', 'once'))
-        sigmaInds(i) = i;
-    else % not a NLME param, so call a theta
+    else % in Theta
         thetaInds(i) = i;
+        if ~isempty(regexp(kName, '^omega__', 'once')) % also in Omega
+            omegaInds(i) = i;
+        end
     end
 end
 thetaInds(thetaInds==0) = [];
-etaInds(etaInds==0)     = [];
 omegaInds(omegaInds==0) = [];
-sigmaInds(sigmaInds==0) = [];
+etaInds(etaInds==0)     = [];
+
+% Get (iOm,jOm) positions of Omega
+nOmega = length(omegaInds);
+omegaPos = zeros(nOmega,2);
+omegaNames = kNames(omegaInds);
+for i = 1:nOmega
+    tokens = regexp(omegaNames{i}, '^omega__(.+)__(.+)$', 'tokens', 'once')';
+    assert(iscell(tokens) && length(tokens) == 2, 'observationNLME:getParameterInds:invalidOmegaTokens', 'Parser didn''t find correct params Omega name %s is referring to', omegaNames{i})
+    ix = find(ismember(kNames, tokens{1}));
+    jx = find(ismember(kNames, tokens{2}));
+    omegaPos(i,:) = [ix,jx];
 end
 
-function Omega = getOmega(k, kNames, thetaInds, omegaInds)
-% Assemble full Omega matrix by looking up params from k and kNames. Omega is a
+end
+
+function [Omega, dOmega_dtheta] = getOmega(omegaInds, omegaPos, k, thetaInds)
+% Assemble full Omega matrix and its derivatives. Omega is a
 % symmetric n x n matrix where n = number of "eta" parameters being fit and
 % order the same as k.
 % Parameters w/o inter-individual variability eta specified have omegas set = 0.
+%
+% Inputs:
+%   omegaInds
+%   omegaPos
+%   k
+%   thetaInds [ ntheta x 1 double vector {[]} ]
+%
+% Outputs:
+%   Omega [ neta x neta double matrix ]
+%   dOmega_dtheta [ neta x neta x ntheta double 3-tensor ]
 
+
+nOmegas = length(omegaInds);
 omegas = k(omegaInds);
-omegaNames = kNames(omegaInds);
-thetaNames = kNames(thetaInds);
-
-no = length(omegaInds);
-n = length(thetaInds);
+n = max(max(omegaPos)); % highest index in here
 Omega = zeros(n);
-for i = 1:no
-    tokens = regexp(omegaNames{i}, '^omega__(.+)__(.+)$', 'tokens', 'once')';
-    assert(iscell(tokens) && length(tokens) == 2, 'observationNLME:getOmega:invalidOmegaTokens', 'Parser didn''t find correct params omega name %s is referring to', omegaNames{i})
-    ix = find(ismember(thetaNames, tokens{1}));
-    jx = find(ismember(thetaNames, tokens{2}));
-    
-    Omega(ix,jx) = omegas(i);
-    Omega(jx,ix) = omegas(i);
-end
+for i = 1:nOmegas
+    iOm = omegaPos(i,1);
+    jOm = omegaPos(i,2);
+    Omega(iOm,jOm) = omegas(i);
+    Omega(jOm,iOm) = omegas(i);
 end
 
-% function Sigma = getSigma(k, kNames, epsInds, sigmaInds)
-% % Assemble full Sigma matrix by looking up params from k and kNames. Sigma is a
-% % symmetric n x n matrix where n = number of "eps" parameters being fit.
-%
-% sigmas = k(sigmaInds);
-% sigmaNames = kNames(sigmaInds);
-% epsNames   = kNames(epsInds);
-%
-% % Trim leading "eps__" from epsNames
-% n = length(epsInds);
-% for i = 1:n
-%     epsNames{i} = strrep(epsNames{i}, 'eps__', '');
-% end
-%
-% no = length(sigmaInds);
-% Sigma = zeros(n);
-% for i = 1:no
-%     tokens = regexp(sigmaNames{i}, '^sigma__(.+)__(.+)$', 'tokens', 'once')';
-%     assert(iscell(tokens) && length(tokens) == 2, 'observationNLME:getSigma:invalidSigmaTokens', 'Parser didn''t find correct params sigma name %s is referring to', sigmaNames{i})
-%     ix = find(ismember(epsNames, tokens{1}));
-%     jx = find(ismember(epsNames, tokens{2}));
-%
-%     Sigma(ix,jx) = sigmas(i);
-%     Sigma(jx,ix) = sigmas(i);
-% end
-% end
-
-% function Gi = getGi(dydT, kNames, thetaInds, etaInds, Fi_y_Ind, ny)
-% % Gi = dF/deta, a nTimes (nObservations) x netas matrix
-% % dydT represents the ny x nT x nt matrix of partial derivatives of
-% %   outputs wrt all parameters being optimized over as (ny x nT) * nt. Going
-% %   down dydT, y changes fastest, i.e., the first ny entries are dy1/dT1, dy2/dT1, dy3/dT1, etc.
-% %   the next ny entries are dy1/dT2, etc.
-% % kNames is sufficient because k's are first in T and other types of params aren't used
-%
-% thetaNames = kNames(thetaInds);
-% etaNames   = kNames(etaInds);
-%
-% nTheta = length(thetaInds);
-% nEta = length(etaInds);
-%
-% % Get ks corresponding to etas
-% dydT_eta_Ind = zeros(nTheta,1);
-% for i = 1:nEta
-%     token = regexp(etaNames{i}, '^eta__(.+)$', 'tokens', 'once');
-%     thetaNameThisEta = token{1};
-%     thetaMaskThisEta = ismember(thetaNames, thetaNameThisEta);
-%     dydT_eta_Ind(thetaMaskThisEta) = find(ismember(kNames, etaNames{i}));
-% end
-%
-% % Assemble Gi matrix
-% % Thetas with no corresponding etas will have 0 values
-% nt = size(dydT,2);
-% Gi = zeros(nt,nTheta);
-% for i = 1:nTheta
-%     offset = ny*(dydT_eta_Ind(i)-1); % to find the right parameter block
-%     ind = Fi_y_Ind + offset; % to find the right output
-%     if ind ~= 0
-%         Gi(:,i) = dydT(ind,:)';
-%     end
-% end
-% end
-
-function Hi = getHi(dydT, epsInds, y_Ind, ny)
-% Hi = dY/deps
-nEps = length(epsInds);
-nt = size(dydT,2);
-Hi = zeros(nt,nEps);
-for i = 1:nEps
-    offset = ny*(epsInds(i)-1); % to find the right parameter block
-    ind = y_Ind + offset; % to find the right output
-    Hi(:,i) = dydT(ind,:)';
-end
+% Calculate derivatives of Omega for higher order if needed
+%   In the current formulation, dOmega_dtheta is a selection matrix with 1s and 0s
+%   according to position
+if nargin == 4 % (&& nargout == 2)
+    ntheta = length(thetaInds);
+    dOmega_dtheta = zeros(n,n,ntheta);
+    [~, thetaPos] = ismember(omegaInds, thetaInds); % positions in theta (m's) that have a nonzero element
+    for i = 1:nOmegas
+        iOm = omegaPos(i,1); % position in Omega with nonzero element
+        jOm = omegaPos(i,2);
+        m = thetaPos(i);
+        dOmega_dtheta(iOm,jOm,m) = 1;
+    end
 end
 
-function output = fixOutputName(output)
+end
+
+function outputs = fixOutputName(outputs)
 % Convert output argument to right form
-if iscell(output)
-    % pass
-elseif ischar(output)
-    output = {output};
+%
+% Inputs:
+%   outputs [ string | cell array of strings ]
+%
+% Outputs:
+%   outputs [ cell array of strings ]
+
+if iscellstr(outputs)
+    vec(outputs);
+elseif ischar(outputs)
+    outputs = {outputs};
 else
     error('observationNLME:invalidOutputArg', 'Output must be a string or cell array of strings')
 end
-nOutputs = length(output);
-% Prefix outputs with 'Ri__' if not already
-for i = 1:nOutputs
-    if ~ischar(output{i})
-        error('observationNLME:invalidOutputType', 'Output must be a cell array of strings')
-    end
-    if ~strncmp(output{i}, 'Ri__', 4)
-        output{i} = ['Ri__' output{i}];
-    end
-end
+
 end

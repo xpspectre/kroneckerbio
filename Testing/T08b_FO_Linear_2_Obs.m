@@ -8,7 +8,7 @@ clear; close all; clc
 rng('default');
 
 % Whether to generate new data for load model and simulated data
-simNew = false;
+simNew = true;
 
 if simNew
     %% Build model
@@ -37,6 +37,11 @@ if simNew
     m = AddErrorModel(m, {'y1','y2'}, {'sigma__y1','';'sigma__y2__y1','sigma__y2'}, {'sigma__y1','sigma__y2__y1','sigma__y2'}, sigmas); % sigma param names are arbitrary
     
     m = FinalizeModel(m);
+    
+    % Hack this in for now
+    thetaNames = {m.Parameters.Name};
+    fOmega = calcOmega({'omega__k1__k1','';'omega__k2__k1','omega__k2__k2'}, thetaNames); % use names from AddOmega - TODO: generalize this
+    
     
     %% Generate simulated data
     n = 1; % number of patients
@@ -70,7 +75,7 @@ if simNew
     end
     
     %% Save data
-    save('FO_linear_data_2_obs.mat', 'm', 'times', 'measurements')
+    save('FO_linear_data_2_obs.mat', 'm', 'fOmega', 'times', 'measurements')
     
 else
     %% Load data
@@ -93,7 +98,7 @@ fit = FitObject('Fit_FO_Linear');
 fit.addModel(m);
 for i = 1:n
     obs = observationFOCEI({'y1','y2'}, times, 'FOCEI', ['Obs' num2str(i)]);
-    obj = obs.Objective(measurements{i});
+    obj = obs.Objective(measurements{i}, fOmega);
     
     fit.addFitConditionData(obj, con);
 end

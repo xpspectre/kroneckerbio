@@ -64,17 +64,19 @@ obs = pastestruct(observationZero(), obs);
         sim.Predictions = int.y(y_Ind,:);
     end
 
-    function obj = objective(measurements)
-        obj = objectiveNLME(outputs, timelist, measurements, method, name);
+    function obj = objective(measurements, fOmega)
+        obj = objectiveNLME(outputs, timelist, measurements, fOmega, method, name);
     end
 
 end
 
-function obj = objectiveNLME(outputs, timelist, measurements, method, name)
+function obj = objectiveNLME(outputs, timelist, measurements, fOmega, method, name)
 % Inputs:
 %   outputs [ string | nOutputs cell array of strings ]
 %   timelist [ ni double vector ]
 %   measurements [ ni x nOutputs double matrix ]
+%   fOmega [ struct ]
+%       Struct containing function handles to Omega functions
 %   method
 %   name
 %
@@ -164,15 +166,6 @@ obj = pastestruct(objectiveZero(), obj);
         ntheta = length(thetaInds);
         neta = length(etaInds);
         
-        [Omega, dOmega_dtheta] = getOmega(omegaInds, omegaPos, int.k, thetaInds);
-        
-        % Calculate Omega inverses for convenience
-        Omega_ = inv(Omega);
-        dOmega_dtheta_ = zeros(size(dOmega_dtheta)); % TODO: may need to handle this symbolically somehow - possibly by going full expansion - leave as 0 for now
-%         for m = 1:ntheta
-%             dOmega_dtheta_(:,:,m) = inv(squeeze(dOmega_dtheta(:,:,m)));
-%         end
-        
         etai = int.k(etaInds);
         
         % Do everything by timepoints
@@ -193,6 +186,9 @@ obj = pastestruct(objectiveZero(), obj);
             pdRi_detai  = zeros(nh,nh,neta,ni);
             pdRi_dxi    = zeros(nh,nh,nx,ni);
             dxi_detai   = zeros(nx,neta,ni);
+            
+            Omega          = fOmega.Omega(int.k);
+            Omega_         = fOmega.OmegaI(int.k);
             
             for j = 1:ni
                 
@@ -381,6 +377,11 @@ obj = pastestruct(objectiveZero(), obj);
             % Assume/TODO - these may be just the correct values when int is reevaluated at etastar
             Ristar  = Ri;
             Ristar_ = Ri_;
+            
+            dOmega_dtheta  = fOmega.dOmega_dtheta(int.k);
+            dOmega_dtheta_ = fOmega.dOmegaI_dtheta(int.k);
+            dOmega_dtheta(:,:,etaInds)  = []; % remember to remove thetas corresponding to etas
+            dOmega_dtheta_(:,:,etaInds) = [];
             
             pdh_dtheta = zeros(nh,ntheta,ni); % depends on time
             pdRi_dtheta = zeros(nh,nh,ntheta,ni);
@@ -959,14 +960,14 @@ obj = pastestruct(objectiveZero(), obj);
                         for j = 1:ni
                             dalstar_dthetamj = reshape(dastar_dtheta(:,l,m,j), 1,nh);
                             dakstar_dthetamj = reshape(dastar_dtheta(:,k,m,j), 1,nh);
-                            Bstarj = squeeze(Bstar(:,:,j));
-                            dBstar_dthetamj = squeeze(dBstar_dtheta(:,:,m,j));
-                            akstarj = reshape(astar(:,k,j), 1,nh);
-                            alstarj = reshape(astar(:,l,j), 1,nh);
+                            Bstarj           = squeeze(Bstar(:,:,j));
+                            dBstar_dthetamj  = squeeze(dBstar_dtheta(:,:,m,j));
+                            akstarj          = reshape(astar(:,k,j), 1,nh);
+                            alstarj          = reshape(astar(:,l,j), 1,nh);
                             dclstar_dthetamj = squeeze(dcstar_dtheta(:,:,l,m,j));
                             dckstar_dthetamj = squeeze(dcstar_dtheta(:,:,k,m,j));
-                            ckstarj = squeeze(cstar(:,:,k,j));
-                            clstarj = squeeze(cstar(:,:,l,j));
+                            ckstarj          = squeeze(cstar(:,:,k,j));
+                            clstarj          = squeeze(cstar(:,:,l,j));
                             
                             dHikl(j) = dalstar_dthetamj*Bstarj*akstarj' + ...
                                 alstarj*dBstar_dthetamj*akstarj' + ...
@@ -1138,51 +1139,6 @@ for i = 1:nOmega
     ix = find(ismember(kNames, tokens{1}));
     jx = find(ismember(kNames, tokens{2}));
     omegaPos(i,:) = [ix,jx];
-end
-
-end
-
-function [Omega, dOmega_dtheta] = getOmega(omegaInds, omegaPos, k, thetaInds)
-% Assemble full Omega matrix and its derivatives. Omega is a
-% symmetric n x n matrix where n = number of "eta" parameters being fit and
-% order the same as k.
-% Parameters w/o inter-individual variability eta specified have omegas set = 0.
-%
-% Inputs:
-%   omegaInds
-%   omegaPos
-%   k
-%   thetaInds [ ntheta x 1 double vector {[]} ]
-%
-% Outputs:
-%   Omega [ neta x neta double matrix ]
-%   dOmega_dtheta [ neta x neta x ntheta double 3-tensor ]
-
-
-nOmegas = length(omegaInds);
-omegas = k(omegaInds);
-n = max(max(omegaPos)); % highest index in here
-Omega = zeros(n);
-for i = 1:nOmegas
-    iOm = omegaPos(i,1);
-    jOm = omegaPos(i,2);
-    Omega(iOm,jOm) = omegas(i);
-    Omega(jOm,iOm) = omegas(i);
-end
-
-% Calculate derivatives of Omega for higher order if needed
-%   In the current formulation, dOmega_dtheta is a selection matrix with 1s and 0s
-%   according to position
-if nargin == 4 % (&& nargout == 2)
-    ntheta = length(thetaInds);
-    dOmega_dtheta = zeros(n,n,ntheta);
-    [~, thetaPos] = ismember(omegaInds, thetaInds); % positions in theta (m's) that have a nonzero element
-    for i = 1:nOmegas
-        iOm = omegaPos(i,1); % position in Omega with nonzero element
-        jOm = omegaPos(i,2);
-        m = thetaPos(i);
-        dOmega_dtheta(iOm,jOm,m) = 1;
-    end
 end
 
 end

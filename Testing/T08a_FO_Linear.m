@@ -8,7 +8,7 @@ clear; close all; clc
 rng('default');
 
 % Whether to generate new data for load model and simulated data
-simNew = false;
+simNew = true;
 
 if simNew
     %% Build model
@@ -18,14 +18,19 @@ if simNew
     m = AddState(m, 'x', 'v', 'x0');
     m = AddParameter(m, 'k', 1);
     m = AddReaction(m, 'Production', {}, {'x'}, 'k');
-    m = AddOutput(m, 'x', 'x');
+    m = AddOutput(m, 'y', 'x');
     
-    omega_k2 = 0.1;
-    sigma_x2 = 0.05;
+    Omega = 0.1;
+    Sigma = 0.05;
     
     m = AddEta(m, 'k');
-    m = AddOmega(m, {'k'}, omega_k2);
-    m = AddErrorModel(m, 'x', [], [], sigma_x2);
+    m = AddOmega(m, {'k'}, Omega);
+    
+    m = AddErrorModel(m, {'y'}, {'sigma__y'}, {'sigma__y'}, Sigma);
+    
+    % Hack this in for now
+    thetaNames = {m.Parameters.Name};
+    fOmega = calcOmega({'omega__k__k'}, thetaNames); % use names from AddOmega - TODO: generalize this
     
     m = FinalizeModel(m);
     
@@ -39,8 +44,8 @@ if simNew
     for i = 1:n
         % Simulate 1 patient
         % Draw from variability distributions
-        eta_k = normrnd(0, sqrt(omega_k2));
-        epsij = normrnd(0, sqrt(sigma_x2), nPoints, 1);
+        eta_k = normrnd(0, sqrt(Omega));
+        epsij = normrnd(0, sqrt(Sigma), nPoints, 1);
         
         % Make model for patient
         mi = m;
@@ -82,8 +87,8 @@ exact = sim.x(times, 1)';
 fit = FitObject('Fit_FO_Linear');
 fit.addModel(m);
 for i = 1:n
-    obs = observationFOCEI('x', times, 'FOCEI', ['Obs' num2str(i)]);
-    obj = obs.Objective(measurements(:,i));
+    obs = observationFOCEI('y', times, 'FOCEI', ['Obs' num2str(i)]);
+    obj = obs.Objective(measurements(:,i), fOmega);
     
     fit.addFitConditionData(obj, con);
 end
@@ -92,6 +97,12 @@ opts.Verbose = 1;
 opts.ComputeSensPlusOne = true; % NLME require (n+1)-th order sensitivities; Note: calls computeObjGrad, which will try to compute dGdk as well, which isn't needed
 opts.Normalized = false; % Simple system has bounded params w/ known ranges
 opts.UseAdjoint = false; % Can't use adjoint (for now) since dy/dT sensitivities not calculated
+opts.ComplexStep = false; % probably not compatible
 
-G = ObjectiveValue(fit, opts);
-[D, G] = ObjectiveGradient(fit, opts);
+G = ObjectiveValue(fit, opts)
+
+[D, G] = ObjectiveGradient(fit, opts)
+
+[Df, Gf] = FiniteObjectiveGradient(fit, opts)
+
+

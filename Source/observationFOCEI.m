@@ -133,7 +133,7 @@ obj = pastestruct(objectiveZero(), obj);
 %       Omega and Sigma are included in Theta
 %       Omega is pulled out separately for convenience for a couple terms
 %       Sigma is wholly included in Omega
-    function [val, discrete] = calcParts(int, order)
+    function [G, dGdtheta] = calcParts(int, order)
         % All terms with star are evaluated at optimal eta star (same as eta in FO method)
         % Inputs:
         %   int [ struct ]
@@ -141,13 +141,6 @@ obj = pastestruct(objectiveZero(), obj);
         %   order [ 1 | 2 ]
         %       Whether to require sensitivity (1) or curvature (2). Redundant
         %       check with presence of int.d2ydx2
-        
-        % Debug: display current order of int
-        if isfield(int, 'd2ydx2')
-            fprintf('Calculating obj fun and grad with 2nd order sensitivities\n')
-        else
-            fprintf('Calculating obj fun and grad with 1st order sensitivities\n')
-        end
         
         %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         % Get common components
@@ -362,12 +355,14 @@ obj = pastestruct(objectiveZero(), obj);
             logLFi = li - 1/2 * log(det(-Hi/(2*pi))); % Almquist
 %             logLFi = li - 1/2 * log(det(-Hi_tilde/(2*pi))); % NONMEM
             
-            val = logLFi
-%             val = -2*logLFi % NONMEM minimizes -2loglikelihood
-            discrete = 0;
+            G = -2*logLFi; % minimize -2loglikelihood
         end
         
-        % Reevaluate int at etastar vs eta in FOCE vs FO
+        
+        %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % TODO: FOCE/I specific code for different etas, reevaluating int for inner
+        % optimization
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         
         if order >= 2
             %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -991,42 +986,54 @@ obj = pastestruct(objectiveZero(), obj);
             end
             
             % Assign output obj fun gradient
-            dGdk = dlogLFi_dtheta
-            
+            dGdtheta = dlogLFi_dtheta;
         end
-        
     end
-
+    
     function [val, discrete] = G(int)
+        % Calculate objective function value
+        fprintf('Calculating obj fun with 1st order sensitivities\n')
         order = 1;
-        [val, discrete] = calcParts(int, order);
-        %         val = 0;
-        %         discrete = 0;
+        G = calcParts(int, order);
+        val = G;
+        discrete = 0;
     end
 
     function val = dGdk(int)
-        % This is called when calculating the obj fun val only and isn't needed.
-        % When it is needed, as when calculating the obj fun grad, int will be
-        % augmented with the 2nd order derivatives.
+        % Calculate the gradient of the objective function w.r.t. parameters k
+        % Note that k includes theta and eta, of which we want theta for the
+        %   usual or outer optimization and eta for the inner optimization for
+        %   conditional expectation methods.
+        % Since NLME requires that the n+1 order sensitivities are calculated
+        %   for each n order calculation (i.e., 1st order sensitivities for G
+        %   calculation), this will be called extraneously in the current scheme
+        %   when only G is needed. Detect that the calling function wants only a
+        %   the lower order term by looking for order of sensitivities.
+        % TODO: fix the above point so this is called exactly when it needs.
+        fprintf('Calculating obj fun and grad with 2nd order sensitivities\n')
         order = 2;
-        if ~isfield(int, 'd2ydx2')
-            val = zeros(int.nk, 1);
-        else
-            val = calcParts(int, order);
+        val = zeros(int.nk, 1);
+        if isfield(int, 'd2ydx2') % calling function want gradient
+            % Testing/TODO: right now, assign these back to non-eta vars and
+            % leave etas as 0's. Later, fix this so fitting NLME always ignores
+            % etas
+            [G, dGdtheta] = calcParts(int, order);
+            thetaInds = getParameterInds(int.k_names);
+            val(thetaInds) = dGdtheta;
         end
     end
 
     function val = d2Gdk2(int)
-        % This is called when calculating the obj gradient and isn't needed
-        %warning('Analytic derivative for NLME d2Gdk2 not implemented yet. Derive and implement it or approximate with finite differences.')
+        % Calculate the Hessian of the objective function w.r.t. parameters k
+        % This is not needed for fitting and hasn't been derived analytically.
+        % It is called extraneously when dGdk is desired, so return a dummy
+        % matrix of 0's to not add anything.
         order = 3;
-        if ~isfield(int, 'd3ydx3') % will never be called
-            val = zeros(int.nk, int.nk);
-        else
+        val = zeros(int.nk, int.nk);
+        if isfield(int, 'd3ydx3') % calling function wants Hessian - will never be called
             val = calcParts(int, order);
         end
     end
-
 
 end
 

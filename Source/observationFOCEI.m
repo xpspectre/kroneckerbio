@@ -180,8 +180,8 @@ obj = pastestruct(objectiveZero(), obj);
             pdRi_dxi    = zeros(nh,nh,nx,ni);
             dxi_detai   = zeros(nx,neta,ni);
             
-            Omega          = fOmega.Omega(int.k);
-            Omega_         = fOmega.OmegaI(int.k);
+            Omega       = fOmega.Omega(int.k);
+            Omega_      = fOmega.OmegaI(int.k);
             
             for j = 1:ni
                 
@@ -986,7 +986,12 @@ obj = pastestruct(objectiveZero(), obj);
             end
             
             % Assign output obj fun gradient
-            dGdtheta = dlogLFi_dtheta;
+            dGdtheta = dlogLFi_dtheta
+            
+            %% Obj fun value w/ full Hessian (Eq 13) for comparison
+            % Eq 18
+            logLFiLapacian = li - 1/2 * log(det(-d2li_detai2/(2*pi)));
+            GLaplacian = -2*logLFiLapacian
         end
     end
     

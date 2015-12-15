@@ -1,8 +1,11 @@
 % Test FO with simple linear model and 2 outputs
-%   Model: 0 -> x with 0-th order rate k
-%   The analytic solution to this model is x[t] = kt
-%   Inter-individual variability is for k, with the form k = k0*exp(eta_k)
-%   Intra-individual variability is for x, with the form eps ~ N(0, sigma_k^2)
+%   Model: x1 -> x2 with rate k1
+%   The analytic/symbolic solution to this model is tracatable:
+%       y1 = x1_0*exp(-k1*t);
+%       y2 = x1_0 - x1_0*exp(-k1*t) + x2_0;
+%   Inter-individual variability is for k1, with the form k1 = k1_0*exp(eta_k1)
+%       An additional parameter k2 is added, which should give a bunch of 0's
+%   Intra-individual variability is for x1 and x2, with variance and covariance
 
 clear; close all; clc
 rng('default');
@@ -14,15 +17,13 @@ if simNew
     %% Build model
     m = InitializeModelAnalytic('LinearModel');
     m = AddCompartment(m, 'v', 3, 1);
-    m = AddSeed(m, 'x1_0', 1);
-    m = AddSeed(m, 'x2_0', 2);
+    m = AddSeed(m, 'x1_0', 10);
+    m = AddSeed(m, 'x2_0', 0.1);
     m = AddState(m, 'x1', 'v', 'x1_0');
     m = AddState(m, 'x2', 'v', 'x2_0');
     m = AddParameter(m, 'k1', 0.9);
     m = AddParameter(m, 'k2', 1.0);
-    m = AddParameter(m, 'k3', 1.1);
-    m = AddReaction(m, 'Reaction1', {}, {'x1'}, 'k1');
-    m = AddReaction(m, 'Reaction2', {'x1'}, {'x2'}, '(k2+k3)*x1');
+    m = AddReaction(m, 'Reaction1', {'x1'}, {'x2'}, 'k1*x1');
     m = AddOutput(m, 'y1', 'x1');
     m = AddOutput(m, 'y2', 'x2');
     
@@ -34,7 +35,7 @@ if simNew
     m = AddEta(m, 'k2');
     m = AddOmega(m, {'k1', 'k2'}, Omega);
     
-    m = AddErrorModel(m, {'y1','y2'}, {'sigma__y1','';'sigma__y2__y1','sigma__y2'}, {'sigma__y1','sigma__y2__y1','sigma__y2'}, sigmas); % sigma param names are arbitrary
+    m = AddErrorModel(m, {'y1','y2'}, {'sigma__y1^2','';'sigma__y2__y1^2','sigma__y2^2'}, {'sigma__y1','sigma__y2__y1','sigma__y2'}, sigmas); % sigma param names are arbitrary
     
     m = FinalizeModel(m);
     
@@ -52,8 +53,11 @@ if simNew
     for i = 1:n
         % Simulate 1 patient
         % Draw from variability distributions
-        Eta = mvnrnd([0, 0], Omega);
-        Eps = mvnrnd([0, 0], sqrt(Sigma), nPoints);
+%         Eta = mvnrnd([0, 0], Omega);
+%         Eps = mvnrnd([0, 0], sqrt(Sigma), nPoints);
+        % Simple error terms for testing
+        Eta = [0 0];
+        Eps = repmat(0.1, nPoints, 2);
         
         % Make model for patient
         mi = m;
@@ -108,9 +112,9 @@ opts.Normalized = false; % Simple system has bounded params w/ known ranges
 opts.UseAdjoint = false; % Can't use adjoint (for now) since dy/dT sensitivities not calculated
 opts.ComplexStep = false; % probably not compatible
 
-G = ObjectiveValue(fit, opts);
+G = ObjectiveValue(fit, opts)
 
-[D, G] = ObjectiveGradient(fit, opts);
-
-[Df, Gf] = FiniteObjectiveGradient(fit, opts);
+[D, G] = ObjectiveGradient(fit, opts)
+% 
+% [Df, Gf] = FiniteObjectiveGradient(fit, opts)
 

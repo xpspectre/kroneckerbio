@@ -1,7 +1,8 @@
 function m = AddOmega(m, names, Omega)
 % Add matrix Omega of Eta covariances to Model.Analytic. These should match the
-% specified etas. Must be run after thetas and etas are added. Omega is made of
-% omegas^2, the variances/covariances.
+% specified etas. Must be run after thetas and etas are added. Omega currently
+% supports a single parameter omega^2 in each position of Omega - the variance
+% (and not the std dev) is specified.
 %
 % Inputs:
 %   m: [ Model.Analytic struct ]
@@ -59,7 +60,7 @@ end
 % Add omegas as individual parameters
 for i = 1:n
     for j = 1:i
-        m = AddParameter(m, ['omega__' names{i} '__' names{j}], sqrt(Omega(i,j)));
+        m = AddParameter(m, ['omega__' names{i} '__' names{j}], Omega(i,j));
     end
 end
 

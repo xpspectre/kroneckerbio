@@ -1,6 +1,7 @@
 % Test FO with simple linear model
 %   Model: 0 -> x with 0-th order rate k
 %   The analytic solution to this model is x[t] = kt
+%       including the initial conditions is x[t] = x0 + kt
 %   Inter-individual variability is for k, with the form k = k0*exp(eta_k)
 %   Intra-individual variability is for x, with the form eps ~ N(0, sigma_k^2)
 
@@ -16,17 +17,17 @@ if simNew
     m = AddCompartment(m, 'v', 3, 1);
     m = AddSeed(m, 'x0', 1);
     m = AddState(m, 'x', 'v', 'x0');
-    m = AddParameter(m, 'k', 1);
+    m = AddParameter(m, 'k', 1.5);
     m = AddReaction(m, 'Production', {}, {'x'}, 'k');
     m = AddOutput(m, 'y', 'x');
     
-    Omega = 0.1;
-    Sigma = 0.05;
+    Omega = 0.2; % Omega specified as omegas^2 (for now)
+    Sigma = sqrt(0.05); % Sigma specified as parameters in R
     
     m = AddEta(m, 'k');
     m = AddOmega(m, {'k'}, Omega);
     
-    m = AddErrorModel(m, {'y'}, {'sigma__y'}, {'sigma__y'}, Sigma);
+    m = AddErrorModel(m, {'y'}, {'sigma__y^2'}, {'sigma__y'}, Sigma);
     
     % Hack this in for now
     thetaNames = {m.Parameters.Name};
@@ -44,8 +45,10 @@ if simNew
     for i = 1:n
         % Simulate 1 patient
         % Draw from variability distributions
-        eta_k = normrnd(0, sqrt(Omega));
-        epsij = normrnd(0, sqrt(Sigma), nPoints, 1);
+%         eta_k = normrnd(0, sqrt(Omega));
+        eta_k = 0; % just replace with 0 for a test case
+%         err = normrnd(0, sqrt(Sigma), nPoints, 1); % generate
+        err = repmat(0.1, nPoints, 1); % just replace with 0.1 for a test case
         
         % Make model for patient
         mi = m;
@@ -59,13 +62,13 @@ if simNew
         sim = SimulateSystem(mi, con, tf);
         
         % Get measurements
-        measurement = sim.x(times,1)' + epsij; % hardcode in 1st state = output + intra-indivual variability
+        measurement = sim.x(times,1)' + err; % hardcode in 1st state = output + intra-indivual variability
         measurements(:,i) = measurement;
         
     end
     
     %% Save data
-    save('FO_linear_data.mat', 'm', 'times', 'measurements')
+    save('FO_linear_data.mat', 'm', 'fOmega', 'times', 'measurements')
     
 else
     %% Load data

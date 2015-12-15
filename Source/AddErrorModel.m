@@ -1,9 +1,8 @@
 function m = AddErrorModel(varargin)
 % Add intra-individual variability / error model R to Model.Analytic for output.
-% The error is eps ~ N(0,R) distributed.
-%   The output is renamed h__{name}
-%   A dummy output Ri__{name} is added to denote the error model
-%   Additional 
+% The error is eps ~ N(0,R) distributed. Each parameter is specified as is.
+% Specify the term squared when inputting the expression if you want the
+% variance from a sigma std dev.
 %
 % Usage:
 %   m = AddErrorModel(m, names)
@@ -33,6 +32,9 @@ function m = AddErrorModel(varargin)
 % Outputs:
 %   m: [ Model.Analytic struct ]
 %       The model with the new sigma and modified outputs
+%
+% Notes:
+%   The implementation adds a dummy output Ri__{name} to denote the error model
 
 % Standardize inputs
 switch nargin
@@ -113,7 +115,6 @@ assert(numel(errornames) == numel(errorvalues), 'AddErrorModel:WrongNumberOfErro
 % Needed because outputs can't depend on other outputs
 % Safe because expression for output is already a valid expression
 % Wrap in parentheses to ensure it's added as a unit
-% Square the entire term to fit Ri form
 % Only operate on lower diagonal
 % Only add nonempty error models (i.e., errormodel terms with parameters, ignoring covariances = 0 usually) because
 %   calculating extra sensitivities scales badly - TODO: refactor sensitivity eq
@@ -128,7 +129,6 @@ for i = 1:nOutputs
             for k = 1:nOutputs
                 em = replaceSymbolRegex(em, y_names{k}, ['(' y_exprs{k} ')']);
             end
-            em = ['(' em ')^2'];
             m = AddOutput(m, ['Ri__' y_names{i} '__' y_names{j}], em);
         end
     end

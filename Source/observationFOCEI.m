@@ -931,7 +931,8 @@ obj = pastestruct(objectiveZero(), obj);
                 for j = 1:ni
                     epsijstar          = squeeze(epsistar(:,j));
                     Rijstar_           = squeeze(Ristar_(:,:,j));
-                    depsijstar_dthetam = squeeze(depsistar_dtheta(:,m,j));
+%                     depsijstar_dthetam = squeeze(depsistar_dtheta(:,m,j));
+                    depsijstar_dthetam = squeeze(depsi_dtheta(:,m,j)); % FIX - the term w/o the star is the right one
                     dRijstar_dthetam   = squeeze(dRistar_dtheta(:,:,m,j));
                     
                     eq28terms(j) = 2*epsijstar'*Rijstar_*depsijstar_dthetam - ...

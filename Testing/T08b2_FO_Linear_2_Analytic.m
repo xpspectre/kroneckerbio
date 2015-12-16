@@ -100,22 +100,35 @@ li = -1/2*sum(lij) - 1/2*eta.'*inv(Omega)*eta - 1/2*log(det(2*pi*Omega));
 % double(evalExpr(li))
 
 % Gradient wrt eta
-% G = gradient(li, eta);
+G = gradient(li, eta);
 
 % Hessian wrt eta - exact
-% H = hessian(li, eta);
+H = hessian(li, eta);
 
 %% log-likelihood
-% logLi = li - 1/2*log(det(-H/(2*pi)));
-% objfunval = -2*double(evalExpr(logLi))
+logLi = li - 1/2*log(det(-H/(2*pi)));
+objfunval = -2*double(evalExpr(logLi))
 
 %% Gradient of log-likelihood wrt theta
-% dlogLF_dtheta = gradient(logLi, theta);
-% objfungrad = double(evalExpr(dlogLF_dtheta))
+dlogLF_dtheta = gradient(logLi, theta);
+objfungrad = double(evalExpr(dlogLF_dtheta))
 
 %% Testing individual components in gradient calculation
-dOmega_inv_dtheta = sym(zeros(neta,neta,ntheta));
+
+dOmega_dtheta = sym(zeros(neta,neta,ntheta));
+for m = 1:ntheta
+    for i = 1:neta
+        for j = 1:i
+            dOmega_dtheta(i,j,m) = diff(Omega(i,j), theta(m));
+            dOmega_dtheta(j,i,m) = diff(Omega(i,j), theta(m));
+        end
+    end
+end
+Omega_vals = double(evalExpr(Omega));
+dOmega_dtheta_vals = double(evalExpr(dOmega_dtheta));
+
 Omega_ = inv(Omega);
+dOmega_inv_dtheta = sym(zeros(neta,neta,ntheta));
 for m = 1:ntheta
     for i = 1:neta
         for j = 1:i
@@ -124,6 +137,7 @@ for m = 1:ntheta
         end
     end
 end
+Omega__vals = double(evalExpr(Omega_));
 dOmega_inv_dtheta_vals = double(evalExpr(dOmega_inv_dtheta));
 
 dRi_detai = sym(zeros(neta,neta,neta)); % all zeros in this example
@@ -165,12 +179,22 @@ end
 
 depsi_detai = sym(zeros(nh,neta));
 for k = 1:neta
-    epsij = epsi(:,j);
+    epsij = epsi(:,j); % all times give same form, derivative wrt measurements is 0
     depsi_detai(:,k) = diff(epsij, eta(k));
 end
 depsi_detai_vals = zeros(nh,neta,ni);
 for j = 1:ni
     depsi_detai_vals(:,:,j) = double(evalTime(evalExpr(depsi_detai), tvals(j)));
+end
+
+% In Eq 37
+d2eps_detaidetai = sym(zeros(nh,neta,neta));
+for l = 1:neta
+    d2eps_detaidetai(:,:,l) = diff(depsi_detai, eta(l));
+end
+d2eps_detaidetai_vals = zeros(nh,neta,neta,ni);
+for j = 1:ni
+    d2eps_detaidetai_vals(:,:,:,j) = double(evalTime(evalExpr(d2eps_detaidetai), tvals(j)));
 end
 
 depsi_dtheta = sym(zeros(nh,ntheta));
@@ -184,7 +208,9 @@ for j = 1:ni
 end
 
 % Eq 47 can be calculated directly symbolically (is this the exact version of an approximation)
-dli_dtheta = gradient(li, theta);
+dli_dtheta = gradient(li, theta); % 1st term in final Eq 23
+dli_dtheta_vals = double(evalExpr(dli_dtheta));
+
 d2li_detaidtheta = sym(zeros(neta,ntheta));
 for m = 1:ntheta
     d2li_detaidtheta(:,m) = gradient(dli_dtheta(m), eta);
@@ -212,8 +238,41 @@ dRi_detai = sym(zeros(nh,nh,neta)); % 0 from the problem
 dRistar_dtheta = dRi_dtheta;
 dRistar_dtheta_vals = dRi_dtheta_vals;
 
+% Eq 28 terms (in summation)
+
+for m = 1:ntheta
+    eq28terms = sym(zeros(ni,1));
+    eq28terms_vals = zeros(ni,1);
+    for j = 1:ni
+        epsij = epsi(:,j); % all times give same form, derivative wrt measurements is 0
+        eq28terms(j) = 2*epsij.'*Ri_*depsi_dtheta(:,m) - epsij.'*Ri_*dRistar_dtheta(:,:,m)*Ri_*epsij + trace(Ri_*dRistar_dtheta(:,:,m));
+        eq28terms_vals(j) = double(evalTime(evalExpr(eq28terms(j)), tvals(j)));
+    end
+end
+
+% Eq 28 last term
+term28last = sym(zeros(1,ntheta));
+for m = 1:ntheta
+    term28last(m) = -1/2*trace(Omega_*dOmega_dtheta(:,:,m));
+end
+term28last_vals = double(evalExpr(term28last));
+
+% Eq 32
+% dcstar_dtheta = sym(zeros(nh,nh,ntheta)) = -Ri_*dRistar_dtheta(m)
+
+% Eq 23 terms
+Hi = hessian(li, eta);
+Hi_ = inv(Hi);
+Hi__vals = double(evalExpr(Hi_)); % pretty close
+
+dHi_dtheta = sym(zeros(nh,nh,ntheta));
+for m = 1:ntheta
+    dHi_dtheta(:,:,m) = diff(Hi, theta(m));
+end
+dHi_dtheta_vals = double(evalExpr(dHi_dtheta));
+
 % Eq 37
-d_dtheta_depsi_detai
+d_dtheta_depsistar_detai = d2eps_dthetadetai
 
 0;
 

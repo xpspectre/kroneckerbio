@@ -59,12 +59,12 @@ for j = 1:nObs
     lij(j) = epsi(j).'*inv(R)*epsi(j) + log(det(2*pi*R));
 end
 li = -1/2*sum(lij) - 1/2*eta.'*inv(Omega)*eta - 1/2*log(det(2*pi*Omega));
-double(evalExpr(epsi));
-double(evalExpr(Omega));
-double(evalExpr(R));
-double(evalExpr(lij));
-double(evalExpr(-1/2*eta.'*inv(Omega)*eta - 1/2*log(det(2*pi*Omega))));
-double(evalExpr(li));
+% double(evalExpr(epsi));
+% double(evalExpr(Omega));
+% double(evalExpr(R));
+% double(evalExpr(lij));
+% double(evalExpr(-1/2*eta.'*inv(Omega)*eta - 1/2*log(det(2*pi*Omega))));
+% double(evalExpr(li));
 
 % Gradient wrt eta
 G = gradient(li, eta);

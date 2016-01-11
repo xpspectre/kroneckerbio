@@ -48,6 +48,11 @@ ints.UseSeeds         = opts.UseSeeds;
 ints.UseInputControls = opts.UseInputControls;
 ints.UseDoseControls  = opts.UseDoseControls;
 
+% NLME-specific fields
+if is(m, 'Model.Nlme')
+    ints.fOmega = m.fOmega;
+end
+
 % Extract continuous term
 if opts.continuous
     error('Continuous objective functions have not been updated')

@@ -7,7 +7,9 @@ function fOmega = calcOmega(Omega, thetas)
 %       Cell matrix representing expressions for Omega variances/covariances
 %   thetas [ ntheta x 1 cell array of strings ]
 %       Cell array containing names of all thetas, including omegas. This
-%       is the order in which d_dtheta will be calculated.
+%       is the order in which d_dtheta will be calculated. Note: this also
+%       includes all etas here, which will be removed when called in
+%       observationFocei.
 %
 % Outputs:
 %   fOmega [ struct ]
@@ -28,9 +30,8 @@ function fOmega = calcOmega(Omega, thetas)
 %   that shouldn't need it - run this function when building model/objective but
 %   only use function handles when fitting
 %   - Assumes entries in input omega can be directly turned into symbolics - i.e., they have valid names
-%   - This should run in FinalizeModel (which should have a dedicated or
-%   modified type for NLME), which should add additional fields to m, which
-%   obj fun should see - but right now, just hack it in
+%   - Actually enforcing the separation of etas would lead to just as messy
+%   of code, so it isn't done for now
 
 % Sanity checks
 assert(size(Omega,1) == size(Omega,2), 'calcOmega:NonSquareOmega', 'Omega must be square')

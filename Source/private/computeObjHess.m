@@ -55,6 +55,11 @@ if verbose_all; tic; end
 % Integrate
 ints = integrateAllCurv(m, con, obj, opts);
 
+% NLME-specific fields
+if is(m, 'Model.Nlme')
+    ints.fOmega = m.fOmega;
+end
+
 % Extract continuous term
 if opts.continuous
     error('Continuous objective functions have not been updated')

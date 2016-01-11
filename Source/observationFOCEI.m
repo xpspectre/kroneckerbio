@@ -1,4 +1,4 @@
-function obs = observationFOCEI(outputs, timelist, method, name)
+function obs = observationFocei(outputs, timelist, method, name)
 % Nonlinear mixed effects observation and objective function for a patient
 %
 % Inputs:
@@ -41,7 +41,7 @@ nOutputs = length(outputs);
 discrete_times = row(unique(timelist));
 
 obs = [];
-obs.Type    = 'Observation.Data.FOCEI';
+obs.Type    = 'Observation.Data.Focei';
 obs.Name    = name;
 obs.Complex = false;
 
@@ -55,7 +55,7 @@ obs.Objective  = @objective;
 obs = pastestruct(observationZero(), obs);
 
     function sim = simulation(int)
-        sim.Type = 'Simulation.Data.FOCEI';
+        sim.Type = 'Simulation.Data.Focei';
         sim.Name = name;
         sim.Output = outputs;
         sim.Times = discrete_times;
@@ -64,19 +64,17 @@ obs = pastestruct(observationZero(), obs);
         sim.Predictions = int.y(y_Ind,:);
     end
 
-    function obj = objective(measurements, fOmega)
-        obj = objectiveNLME(outputs, timelist, measurements, fOmega, method, name);
+    function obj = objective(measurements)
+        obj = objectiveFocei(outputs, timelist, method, name, measurements);
     end
 
 end
 
-function obj = objectiveNLME(outputs, timelist, measurements, fOmega, method, name)
+function obj = objectiveFocei(outputs, timelist, method, name, measurements)
 % Inputs:
 %   outputs [ string | nOutputs cell array of strings ]
 %   timelist [ ni double vector ]
 %   measurements [ ni x nOutputs double matrix ]
-%   fOmega [ struct ]
-%       Struct containing function handles to Omega functions
 %   method
 %   name
 %
@@ -91,12 +89,12 @@ nOutputs = length(outputs);
 discrete_times = row(unique(timelist));
 
 % Verify measurements match times
-assert(all(size(measurements) == [length(timelist), nOutputs]), 'objectiveFOCEI:invalidMeasurements', 'Dimensions of measurements don''t match nTimes and/or nOutputs')
+assert(all(size(measurements) == [length(timelist), nOutputs]), 'objectiveFocei:invalidMeasurements', 'Dimensions of measurements don''t match nTimes and/or nOutputs')
 
 % Inherit observation
-obj = observationFOCEI(outputs, timelist, method, name);
+obj = observationFocei(outputs, timelist, method, name);
 
-obj.Type = 'Objective.Data.NLME';
+obj.Type = 'Objective.Data.Focei';
 obj.Continuous = false;
 
 obj.G      = @G;
@@ -180,8 +178,8 @@ obj = pastestruct(objectiveZero(), obj);
             pdRi_dxi    = zeros(nh,nh,nx,ni);
             dxi_detai   = zeros(nx,neta,ni);
             
-            Omega       = fOmega.Omega(int.k);
-            Omega_      = fOmega.OmegaI(int.k);
+            Omega       = int.fOmega.Omega(int.k);
+            Omega_      = int.fOmega.OmegaI(int.k);
             
             for j = 1:ni
                 
@@ -373,8 +371,8 @@ obj = pastestruct(objectiveZero(), obj);
             Ristar  = Ri;
             Ristar_ = Ri_;
             
-            dOmega_dtheta  = fOmega.dOmega_dtheta(int.k);
-            dOmega_dtheta_ = fOmega.dOmegaI_dtheta(int.k);
+            dOmega_dtheta  = int.fOmega.dOmega_dtheta(int.k);
+            dOmega_dtheta_ = int.fOmega.dOmegaI_dtheta(int.k);
             dOmega_dtheta(:,:,etaInds)  = []; % remember to remove thetas corresponding to etas
             dOmega_dtheta_(:,:,etaInds) = [];
             

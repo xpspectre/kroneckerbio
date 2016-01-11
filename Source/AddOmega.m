@@ -1,5 +1,5 @@
 function m = AddOmega(m, names, Omega)
-% Add matrix Omega of Eta covariances to Model.Analytic. These should match the
+% Add matrix Omega of Eta covariances to Model.Analytic/Nlme. These should match the
 % specified etas. Must be run after thetas and etas are added. Omega currently
 % supports a single parameter omega^2 in each position of Omega - the variance
 % (and not the std dev) is specified.
@@ -57,11 +57,16 @@ if any(eig(OmegaFull) < 0)
     warning('AddOmega:OmegaNotPositiveSemiDefinite', 'The full Omega is not positive semi-definite and is an invalid covariance matrix. Using anyway')
 end
 
-% Add omegas as individual parameters
+% Add omegas as individual parameters and names to model
+OmegaNames = repmat({''},n);
 for i = 1:n
     for j = 1:i
-        m = AddParameter(m, ['omega__' names{i} '__' names{j}], Omega(i,j));
+        OmegaName = ['omega__' names{i} '__' names{j}];
+        OmegaNames{i,j} = OmegaName;
+        m = AddParameter(m, OmegaName, Omega(i,j));
     end
 end
+
+m.OmegaNames = OmegaNames;
 
 m.Ready = false;

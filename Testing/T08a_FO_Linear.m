@@ -29,10 +29,6 @@ if simNew
     
     m = AddErrorModel(m, {'y'}, {'sigma__y^2'}, {'sigma__y'}, Sigma);
     
-    % Hack this in for now
-    thetaNames = {m.Parameters.Name};
-    fOmega = calcOmega({'omega__k__k'}, thetaNames); % use names from AddOmega - TODO: generalize this
-    
     m = FinalizeModel(m);
     
     %% Generate simulated data
@@ -68,7 +64,7 @@ if simNew
     end
     
     %% Save data
-    save('FO_linear_data.mat', 'm', 'fOmega', 'times', 'measurements')
+    save('FO_linear_data.mat', 'm', 'times', 'measurements')
     
 else
     %% Load data
@@ -90,8 +86,8 @@ exact = sim.x(times, 1)';
 fit = FitObject('Fit_FO_Linear');
 fit.addModel(m);
 for i = 1:n
-    obs = observationFOCEI('y', times, 'FOCEI', ['Obs' num2str(i)]);
-    obj = obs.Objective(measurements(:,i), fOmega);
+    obs = observationFocei('y', times, 'FOCEI', ['Obs' num2str(i)]);
+    obj = obs.Objective(measurements(:,i));
     
     fit.addFitConditionData(obj, con);
 end

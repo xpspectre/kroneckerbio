@@ -39,10 +39,6 @@ if simNew
     
     m = FinalizeModel(m);
     
-    % Hack this in for now
-    thetaNames = {m.Parameters.Name};
-    fOmega = calcOmega({'omega__k1__k1','';'omega__k2__k1','omega__k2__k2'}, thetaNames); % use names from AddOmega - TODO: generalize this
-    
     %% Generate simulated data
     n = 1; % number of patients
     nPoints = 5; % number of measurements/patient (for now, both measurements are at the same times)
@@ -78,7 +74,7 @@ if simNew
     end
     
     %% Save data
-    save('FO_linear_data_2_obs.mat', 'm', 'fOmega', 'times', 'measurements')
+    save('FO_linear_data_2_obs.mat', 'm', 'times', 'measurements')
     
 else
     %% Load data
@@ -100,8 +96,8 @@ exact = sim.x(times, 1)';
 fit = FitObject('Fit_FO_Linear_2_Obs');
 fit.addModel(m);
 for i = 1:n
-    obs = observationFOCEI({'y1','y2'}, times, 'FOCEI', ['Obs' num2str(i)]);
-    obj = obs.Objective(measurements{i}, fOmega);
+    obs = observationFocei({'y1','y2'}, times, 'FOCEI', ['Obs' num2str(i)]);
+    obj = obs.Objective(measurements{i});
     
     fit.addFitConditionData(obj, con);
 end

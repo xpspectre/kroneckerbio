@@ -231,13 +231,36 @@ for i = 1:ny
     
 end
 
+%% Determine if model is a nonlinear mixed effects model
+if isNlmeModel(m);
+    m.Type = 'Model.Nlme';
+end
+
+    function nlme = isNlmeModel(m)
+        % Returns true if input model is a nonlinear mixed effects model,
+        %   which is an analytic model that has additional
+        %   functionality/modified behavior
+        %
+        % Searches m.Rules for 'single sub' type rules, which implement the
+        %   inter-individual variability models.
+        % Note: this is a hack - a proper implementation of NLME models
+        %   would use a properly defined (sub-)class that didn't have to use
+        %   this heuristic
+        ruleTypes = vec({m.Rules.Type});
+        if any(ismember(ruleTypes, 'single sub'));
+            nlme = true;
+        else
+            nlme = false;
+        end
+    end
+
 %% Type-specific finalization
 if is(m, 'Model.MassActionAmount')
     m = finalizeModelMassActionAmount(m, varargin{:});
 elseif is(m, 'Model.Analytic')
     m = finalizeModelAnalytic(m, varargin{:});
+elseif is(m, 'Model.Nlme')
+    m = finalizeModelNlme(m, varargin{:});
 end
 
 end
-
-

@@ -252,7 +252,7 @@ if order >= 1
         % Eq 18, for each patient
         logLFi = li - 1/2 * log(det(-Hi/(2*pi))); % Almquist
         %             logLFi = li - 1/2 * log(det(-Hi_tilde/(2*pi))); % NONMEM
-        objfunval = -2*logLFi; % minimize -2loglikelihood
+        objfunval = -logLFi; % negate to maximize log-likelihood
     elseif strcmp(layer, 'inner')
         objfunval = -li; % negate to maximize likelihood
     end
@@ -913,12 +913,12 @@ if order >= 2
         end
         
         % Assign output obj fun gradient
-        objfungrad = dlogLFi_dtheta;
+        objfungrad = -dlogLFi_dtheta; % negate to maximize likelihood
         
         %% Debug: Obj fun value w/ full Hessian (Eq 13) for comparison
         % Eq 18
         %             logLFiLapacian = li - 1/2 * log(det(-d2li_detai2/(2*pi)));
-        %             GLaplacian = -2*logLFiLapacian;
+        %             GLaplacian = -logLFiLapacian;
     end
 end
 end

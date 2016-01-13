@@ -127,6 +127,9 @@ opts.InnerOpts = innerOpts;
 
 [fitOut, G, D] = FitObjectiveNlme(fit, opts);
 
+% Show final params
+fitVals = [fit.Models.Parameters.Value]';
+fprintf('Optimized param values are: k: %g\tomega__k__k: %g\tsigma__y: %g\n', fitVals(1), fitVals(3), fitVals(4))
 % FO final params values for default single participant:
 % k = [1.51668703306234]
 % omega__k__k = [0.0598858830220903]

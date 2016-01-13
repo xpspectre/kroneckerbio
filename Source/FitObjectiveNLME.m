@@ -119,7 +119,8 @@ outerOpts_.MaxIter                 = 1000;
 outerOpts_.MaxStepSize             = 0.1; % smaller
 outerOpts_.RelLineSrchBndDuration  = Inf;
 outerOpts_.TolCon                  = 1e-4; % larger
-outerOpts_.DerivativeCheck         = 'on'; % Turn on to debug analytic gradient calculation
+outerOpts_.DerivativeCheck         = 'off'; % Turn on to debug analytic gradient calculation
+outerOpts_.FinDiffType             = 'central'; % Slower but more accurate
 
 outerOpts_ = mergestruct(outerOpts_, opts);
 
@@ -142,6 +143,7 @@ outerOpts.RelLineSrchBnd          = outerOpts_.MaxStepSize;
 outerOpts.RelLineSrchBndDuration  = outerOpts_.RelLineSrchBndDuration;
 outerOpts.TolCon                  = outerOpts_.TolCon;
 outerOpts.DerivativeCheck         = outerOpts_.DerivativeCheck;
+outerOpts.FinDiffType             = outerOpts_.FinDiffType;
 
 if verbosity > 1
     outerOpts.Display = 'iter'; % or 'iter-detailed'

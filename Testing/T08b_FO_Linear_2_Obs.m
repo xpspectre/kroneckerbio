@@ -28,15 +28,18 @@ if simNew
     m = AddOutput(m, 'y2', 'x2');
     
     Omega = [0.1, 0.01; 0.01, 0.1];
-    sigmas = [0.05, 0.01, 0.04];
-    Sigma = [sigmas(1), sigmas(2); sigmas(2), sigmas(3)];
+%     sigmas = [0.05, 0.01, 0.04];
+    sigmas = [0.05, 0.04];
+%     Sigma = [sigmas(1), sigmas(2); sigmas(2), sigmas(3)];
+    Sigma = [sigmas(1), 0; 0, sigmas(2)];
     
     m = AddEta(m, 'k1');
     m = AddEta(m, 'k2');
     m = AddOmega(m, {'k1', 'k2'}, Omega);
     
-    m = AddErrorModel(m, {'y1','y2'}, {'sigma__y1^2','';'sigma__y2__y1^2','sigma__y2^2'}, {'sigma__y1','sigma__y2__y1','sigma__y2'}, sigmas); % sigma param names are arbitrary
-    
+%     m = AddErrorModel(m, {'y1','y2'}, {'sigma__y1^2','';'sigma__y2__y1^2','sigma__y2^2'}, {'sigma__y1','sigma__y2__y1','sigma__y2'}, sigmas); % sigma param names are arbitrary
+    m = AddErrorModel(m, {'y1','y2'}, {'sigma__y1^2','';'','sigma__y2^2'}, {'sigma__y1','sigma__y2'}, sigmas); % sigma param names are arbitrary
+
     m = FinalizeModel(m);
     
     %% Generate simulated data
@@ -125,4 +128,10 @@ opts.MaxIter                 = 1000;
 innerOpts = [];
 opts.InnerOpts = innerOpts;
 
+initialVals = [fit.Models.Parameters.Value]';
 [fitOut, G, D] = FitObjectiveNlme(fit, opts);
+finalVals = [fitOut.Models.Parameters.Value]'; % fit's values are modified throughout (since it's a handle object) so be careful
+
+% Show final params
+fprintf('Initial param values are %g\n', initialVals)
+fprintf('Final   param values are %g\n', finalVals)

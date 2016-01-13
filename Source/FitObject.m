@@ -544,7 +544,7 @@ classdef FitObject < handle
                this.Objectives = [this.Objectives; objective];
                
                % If verbose, print brief description of outputs being fit.
-               if this.options.Verbose >= 2
+               if this.options.Verbose > 2
                    fprintf('Added objective %s that fits outputs %s in condition %s in model %s\n', objective.Name, cellstr2str(fitOutputs), parentConditionName, parentModelName)
                end
            end
@@ -706,7 +706,15 @@ classdef FitObject < handle
        %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
        % Called inside optimizer's loop
        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-       function [G, D, H] = computeObjective(this)
+       function [G, D, H] = computeObjective(this, conditions)
+           % Compute combined objective function value, gradient, and
+           % Hessian of this FitObject.
+           %
+           % Inputs:
+           %    conditions [ double vector {1:this.nConditions} ]
+           %        Indices of conditions to compute quantities for.
+           %        Default is to compute using all conditions.
+           %
            % Outputs:
            %    G [ double scalar ]
            %        Objective function value from sum of all objectives in fit
@@ -717,13 +725,25 @@ classdef FitObject < handle
            %        Hessian w.r.t. all parameters in Theta for fmincon
            %
            % Note: If this.options.ComputeSensPlusOne = true, Hessian w.r.t.
-           % parameters to be optimized on cannot be computed.
+           %    parameters to be optimized on cannot be computed.
            % TODO: Ability to use finite difference approximations if specified
+           
+           if nargin < 2
+               conditions = [];
+           end
+           if isempty(conditions)
+               conditions = 1:this.nConditions;
+           end
+           nCon = length(conditions);
+           
+           if this.options.ComputeSensPlusOne
+               assert(nargout < 3, 'KroneckerBio:FitObject:computeObjective:HessianOrderTooHigh', 'Hessian cannot be computed since ComputeSensPlusOne requires 3rd order sensitivities.')
+           end
            
            if nargout == 1 % objective function value
                
                Gs = zeros(this.nConditions,1);
-               for i = 1:this.nConditions
+               for i = 1:nCon
                    modelIdx = this.Conditions(i).ParentModelIdx;
                    objectives = this.Objectives(this.componentMap(:,2) == i)';
                    
@@ -739,16 +759,17 @@ classdef FitObject < handle
            
            if nargout == 2 % gradient
                
-               Gs = zeros(this.nConditions,1);
-               Ds = cell(this.nConditions,1);
-               for i = 1:this.nConditions
-                   modelIdx = this.Conditions(i).ParentModelIdx;
-                   objectives = this.Objectives(this.componentMap(:,2) == i)';
+               Gs = zeros(nCon,1);
+               Ds = cell(nCon,1);
+               for i = 1:nCon
+                   iCon = conditions(i);
+                   modelIdx = this.Conditions(iCon).ParentModelIdx;
+                   objectives = this.Objectives(this.componentMap(:,2) == iCon)';
                    
                    if this.options.ComputeSensPlusOne
-                       [Gi, Di] = computeObjHess(this.Models(modelIdx), this.Conditions(i), objectives, this.options);
+                       [Gi, Di] = computeObjHess(this.Models(modelIdx), this.Conditions(iCon), objectives, this.options);
                    else
-                       [Gi, Di] = computeObjGrad(this.Models(modelIdx), this.Conditions(i), objectives, this.options);
+                       [Gi, Di] = computeObjGrad(this.Models(modelIdx), this.Conditions(iCon), objectives, this.options);
                    end
                    
                    Gs(i) = Gi;
@@ -761,17 +782,18 @@ classdef FitObject < handle
            
            if nargout == 3 % Hessian, normally not called during fitting
                
-               Gs = zeros(this.nConditions,1);
-               Ds = cell(this.nConditions,1);
-               Hs = cell(this.nConditions,1);
-               for i = 1:this.nConditions
-                   modelIdx = this.Conditions(i).ParentModelIdx;
-                   objectives = this.Objectives(this.componentMap(:,2) == i)';
+               Gs = zeros(nCon,1);
+               Ds = cell(nCon,1);
+               Hs = cell(nCon,1);
+               for i = 1:nCon
+                   iCon = conditions(i);
+                   modelIdx = this.Conditions(iCon).ParentModelIdx;
+                   objectives = this.Objectives(this.componentMap(:,2) == iCon)';
                    
                    if this.options.ComputeSensPlusOne
                        error('FitObject:computeObjective:tooHighSensOrder', 'ComputeSensPlusOne = true was specified for an obective Hessian calculation and 3rd order sensitivities are not implemented.')
                    else
-                       [Gi, Di, Hi] = computeObjHess(this.Models(modelIdx), this.Conditions(i), objectives, this.options);
+                       [Gi, Di, Hi] = computeObjHess(this.Models(modelIdx), this.Conditions(iCon), objectives, this.options);
                    end
                    
                    Gs(i) = Gi;

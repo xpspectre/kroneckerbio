@@ -130,6 +130,12 @@ function obj = objectiveZero(dims)
 %       The following are defined for data objective functions only.
 %       .AddData [ handle @(sol) returns objective struct scalar ]
 %           Use the simulation to sample data and add it to the objective
+%
+%       The following is a catch-all field for extra fields
+%       .private [ anything ]
+%           Additional field, usually a struct, that contains
+%           objective function-specific variables that don't belong in the
+%           general signature.
 
 % (c) 2015 David R Hagen & Bruce Tidor
 % This work is released under the MIT license.
@@ -187,6 +193,9 @@ obj.p = @p;
 obj.logp = @logp;
 obj.F = @F;
 obj.Fn = @Fn;
+
+% Private field for misc extras
+obj.private = [];
 
 % Copy the objective structure
 obj = repmat(obj, dims);

@@ -1,5 +1,5 @@
 function [fitOut, beta, psi, stats] = FitNLME(fit, opts)
-% Fit nonlinear mixed effects model
+% Fit nonlinear mixed effects model using built-in Matlab NLME methods
 % Inputs:
 %   fit [ FitObject ]
 %       Specifies fitting scheme.

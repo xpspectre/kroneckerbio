@@ -75,7 +75,6 @@ function con = experimentZero(m)
 %           Some experimental conditions have extra information associated
 %           with them, which is stored here because Matlab does not like
 %           stacking structs with different fields.
-%   TODO: unify parameters
 
 % (c) 2015 David R Hagen & Bruce Tidor
 % This work is released under the MIT license.

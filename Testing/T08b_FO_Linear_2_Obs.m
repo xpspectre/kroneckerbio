@@ -49,11 +49,11 @@ if simNew
     for i = 1:n
         % Simulate 1 patient
         % Draw from variability distributions
-%         Eta = mvnrnd([0, 0], Omega);
-%         Eps = mvnrnd([0, 0], sqrt(Sigma), nPoints);
+        Eta = mvnrnd([0, 0], Omega);
+        Eps = mvnrnd([0, 0], sqrt(Sigma), nPoints);
         % Simple error terms for testing
-        Eta = [0 0];
-        Eps = repmat(0.1, nPoints, 2);
+%         Eta = [0 0];
+%         Eps = repmat(0.1, nPoints, 2);
         
         % Make model for patient
         mi = m;
@@ -83,7 +83,6 @@ end
 
 %% Test FO method
 % Supply analytic solutions and sensitivities
-% k = m.k(1);
 n = numel(measurements);
 tf = times(end);
 
@@ -96,21 +95,34 @@ exact = sim.x(times, 1)';
 fit = FitObject('Fit_FO_Linear_2_Obs');
 fit.addModel(m);
 for i = 1:n
+    con = experimentInitialValue(m, [], [], [], ['Con' num2str(i)]);
+    
     obs = observationFocei({'y1','y2'}, times, 'FOCEI', ['Obs' num2str(i)]);
-    obj = obs.Objective(measurements{i});
+    obj = obs.Objective(measurements{i}'); % measurements must be specified as a nOutput x ntimes matrix
     
     fit.addFitConditionData(obj, con);
 end
 opts = [];
-opts.Verbose = 1;
+opts.Verbose = 3;
 opts.ComputeSensPlusOne = true; % NLME require (n+1)-th order sensitivities; Note: calls computeObjGrad, which will try to compute dGdk as well, which isn't needed
 opts.Normalized = false; % Simple system has bounded params w/ known ranges
 opts.UseAdjoint = false; % Can't use adjoint (for now) since dy/dT sensitivities not calculated
 opts.ComplexStep = false; % probably not compatible
 
-G = ObjectiveValue(fit, opts)
-
-[D, G] = ObjectiveGradient(fit, opts)
+% G = ObjectiveValue(fit, opts)
+% 
+% [D, G] = ObjectiveGradient(fit, opts)
 % 
 % [Df, Gf] = FiniteObjectiveGradient(fit, opts)
 
+%% Run fit
+% opts.Approximation = 'FO';
+opts.Approximation = 'FOCEI';
+opts.MaxStepSize             = 0.1; % smaller (jumps around too much with normal FitObjective value of 1)
+opts.MaxFunEvals             = 20000; % more fun evals/step 
+opts.MaxIter                 = 1000;
+
+innerOpts = [];
+opts.InnerOpts = innerOpts;
+
+[fitOut, G, D] = FitObjectiveNlme(fit, opts);

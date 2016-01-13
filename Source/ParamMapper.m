@@ -126,7 +126,8 @@ classdef (Abstract) ParamMapper < handle
                 % TODO: make this error check more thorough
             end
             
-            nCon = size(this.paramsMap, 1);
+%             nCon = size(this.paramsMap, 1);
+            nCon = size(Tlocal,1); % Only process the gradients/Hessians passed to it
             if order == 1
                 T = zeros(this.nT,1);
             else

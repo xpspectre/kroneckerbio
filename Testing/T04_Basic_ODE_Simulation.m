@@ -8,7 +8,6 @@ m = LoadModelMassAction('Equilibrium.txt');
 
 %% Construct experiment
 con = experimentInitialValue(m, [], [], [], 'InitialValueExperiment');
-con = ExperimentInitialValue(m, [], [], [], 'InitialValueExperiment');
 
 %% Simulate
 tF = 1; % final time

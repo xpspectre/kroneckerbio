@@ -45,8 +45,7 @@ if nargin < 6
 end
 
 % m
-% assert(is(m, 'Model'), 'KroneckerBio:Dose:m', 'm must be a Model')
-% m = keepfields(m, {'Type', 'ns'});
+assert(isa(m, 'Model'), 'KroneckerBio:Dose:InvalidModel', 'm must be a Model')
 
 % d
 assert(isfunction(d) && nargin(d) == 2, 'KroneckerBio:Dose:d', 'd must be a function handle acceptiong 2 arguments')

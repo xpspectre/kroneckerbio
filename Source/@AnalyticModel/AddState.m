@@ -14,6 +14,8 @@ function AddState(this, name, compartment, ic)
 %       String expression for the initial condition in terms of seeds or
 %       nonnegative scalar initial amount.
 
+import Validate.*
+
 % Clean up inputs
 if nargin < 4
     ic = [];
@@ -25,8 +27,8 @@ this.nx = nx;
 this.growStates;
 
 % Add item
-this.States(nx).Name         = FieldValidator.SpeciesName(name);
-this.States(nx).Compartment  = FieldValidator.CompartmentName(compartment);
-this.States(nx).InitialValue = FieldValidator.StateInitialCondition(ic);
+this.States(nx).Name         = Validate.SpeciesName(name);
+this.States(nx).Compartment  = Validate.CompartmentName(compartment);
+this.States(nx).InitialValue = Validate.StateInitialCondition(ic);
 
 this.Ready = false;

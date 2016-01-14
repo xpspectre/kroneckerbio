@@ -1,8 +1,8 @@
-function dos = doseConstant(m, amounts, times, receivers)
-%doseConstant Easily create dosing functions for a series of constant
+function dos = DoseConstant(m, amounts, times, receivers)
+%DoseConstant Easily create dosing functions for a series of constant
 %   doses
 %
-%   dos = dosingConstant(m, amounts, times, receivers)
+%   dos = DoseConstant(m, amounts, times, receivers)
 %
 %   This returns a dose structure with a dose applied in a given amount at
 %   a given time. The amount of the dose will be a dose control parameter.
@@ -41,8 +41,7 @@ if isempty(receivers)
 end
 
 % m
-assert(is(m, 'Model'), 'KroneckerBio:doseConstant:m', 'm must be a Model')
-m = keepfields(m, {'Type', 'ns'});
+assert(isa(m, 'Model'), 'KroneckerBio:doseConstant:InvalidModel', 'm must be a Model')
 
 % amounts
 assert(isnumeric(amounts) && all(amounts >= 0), 'KroneckerBio:doseConstant:amounts', 'amounts must be a nonegative vector')

@@ -14,7 +14,7 @@ m = AddParameter(m, 'k3', 7);
 m = addStatesAsOutputs(m);
 m = FinalizeModel(m);
 
-dos = doseConstant(m, [5,8], 2:10);
+dos = DoseConstant(m, [5,8], 2:10);
 con = experimentInitialValue(m, [], [], dos);
 
 values = [

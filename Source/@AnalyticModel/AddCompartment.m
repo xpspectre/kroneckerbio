@@ -20,14 +20,16 @@ function AddCompartment(this, name, dimension, size)
 %       compartment size can either be a constant or a string expression as a
 %       function of other components in the model.
 
+import Validate.*
+
 % Increment counter
 nv = this.nv + 1;
 this.nv = nv;
 this.growCompartments;
 
 % Add item
-this.Compartments(nv).Name      = FieldValidator.CompartmentName(name);
-this.Compartments(nv).Dimension = FieldValidator.CompartmentDimension(dimension);
-this.Compartments(nv).Size      = FieldValidator.CompartmentSize(size, dimension);
+this.Compartments(nv).Name      = Validate.CompartmentName(name);
+this.Compartments(nv).Dimension = Validate.CompartmentDimension(dimension);
+this.Compartments(nv).Size      = Validate.CompartmentSize(size, dimension);
 
 this.Ready = false;

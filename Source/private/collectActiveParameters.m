@@ -5,7 +5,7 @@ n_con = size(con, 1);
 ns = m.ns;
 
 % Store complete parameter sets
-k = m.k;
+k = m.CollectParameters;
 
 s = zeros(ns, n_con);
 for i_con = 1:n_con

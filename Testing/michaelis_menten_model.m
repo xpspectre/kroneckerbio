@@ -2,32 +2,32 @@ function [m, con, obj, opts, eve] = michaelis_menten_model()
 % Simple analytic model for a variety of tests
 
 %% Build model
-m = InitializeModelAnalytic('MichaelisMentenModel');
+m = AnalyticModel('MichaelisMentenModel');
 
-m = AddCompartment(m, 'solution', 3, 1);
+m.AddCompartment('solution', 3, 1);
 
-m = AddInput(m, 'E', 'solution', 1);
+m.AddInput('E', 'solution', 1);
 
-m = AddState(m, 'S', 'solution', 'S0^2');
-m = AddState(m, 'P', 'solution', 10);
+m.AddState('S', 'solution', 'S0^2');
+m.AddState('P', 'solution', 10);
 
-m = AddParameter(m, 'Km', 10);
-m = AddParameter(m, 'kcat', 2);
+m.AddParameter('Km', 10);
+m.AddParameter('kcat', 2);
 
-m = AddSeed(m, 'S0', 5);
+m.AddSeed('S0', 5);
 
-m = AddReaction(m, 'rxn1', 'S', 'P', 'kcat*E*S/(Km+S)');
+m.AddReaction('rxn1', 'S', 'P', 'kcat*E*S/(Km+S)');
 
-m = AddOutput(m, 'S', 'S');
-m = AddOutput(m, 'P', 'P');
-m = AddOutput(m, 'r', 'kcat*E*S/(Km+S)');
+m.AddOutput('S', 'S');
+m.AddOutput('P', 'P');
+m.AddOutput('r', 'kcat*E*S/(Km+S)');
 
-m = FinalizeModel(m);
+m.Finalize;
 
 %% Make experimenal condition and generate test data
 if nargout > 1
 
-    dos = doseConstant(m, 3, [2; 4; 6; 8]);
+    dos = DoseConstant(m, 3, [2; 4; 6; 8]);
     u = @(t,q) repmat(q.^2,1,numel(t));
     dudq = @(t,q) 2.*q;
     d2udq2 = @(t,q) 2;

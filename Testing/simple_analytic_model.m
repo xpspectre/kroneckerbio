@@ -9,7 +9,7 @@ m = RemoveParameter(m, 'growth_factor_injection');
 m = addStatesAsOutputs(m);
 m = FinalizeModel(m);
 
-dos = doseConstant(m, 8, [10,20]);
+dos = DoseConstant(m, 8, [10,20]);
 inp = inputConstant(m, 2.5);
 con = experimentInitialValue(m, [], inp, dos);
 

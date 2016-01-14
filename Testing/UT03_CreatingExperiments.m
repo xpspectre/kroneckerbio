@@ -36,7 +36,7 @@ end
 function testInitialValueExperimentDoseConstant(a)
 m = simple_model();
 d = rand(m.ns,1);
-dos = doseConstant(m, d, 1:10);
+dos = DoseConstant(m, d, 1:10);
 con = experimentInitialValue(m, [], [], dos);
 a.verifyEqual(con.s, m.s);
 a.verifyEqual(con.u(1), m.u);
@@ -92,7 +92,7 @@ end
 function testSteadyStateExperimentDoseConstant(a)
 m = simple_model();
 d = rand(m.ns,1);
-dos = doseConstant(m, d, 1:10);
+dos = DoseConstant(m, d, 1:10);
 con = experimentSteadyState(m, [], [], [], dos);
 a.verifyEqual(con.s, m.s);
 a.verifyEqual(con.u(1), m.u);

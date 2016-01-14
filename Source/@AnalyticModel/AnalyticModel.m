@@ -15,6 +15,9 @@ classdef AnalyticModel < Model
     
     methods
         function this = AnalyticModel(name)
+            if nargin < 1
+                name = [];
+            end
             this@Model(name);
         end
     end

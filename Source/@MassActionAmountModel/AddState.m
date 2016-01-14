@@ -17,6 +17,8 @@ function AddState(this, name, compartment, ic)
 %       given, this will be the initial condition of the state, which will
 %       not have an associated parameter.
 
+import Validate.*
+
 % Clean-up inputs
 if nargin < 4
     ic = [];
@@ -28,8 +30,8 @@ this.nx = nx;
 this.growStates;
 
 % Add item
-this.States(nx).Name         = FieldValidator.SpeciesName(name);
-this.States(nx).Compartment  = FieldValidator.CompartmentName(compartment);
-this.States(nx).InitialValue = FieldValidator.StateInitialConditionMassAction(ic);
+this.States(nx).Name         = Validate.SpeciesName(name);
+this.States(nx).Compartment  = Validate.CompartmentName(compartment);
+this.States(nx).InitialValue = Validate.StateInitialConditionMassAction(ic);
 
 this.Ready = false;

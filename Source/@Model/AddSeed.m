@@ -14,13 +14,15 @@ function AddSeed(this, name, value)
 %   value: [ nonnegative scalar ]
 %       The numeric value of the parameter
 
+import Validate.*
+
 % Increment counter
 ns = this.ns + 1;
 this.ns = ns;
 this.growSeeds;
 
 % Add item
-this.Seeds(ns).Name  = FieldValidator.ParameterName(name);
-this.Seeds(ns).Value = FieldValidator.ParameterValue(value);
+this.Seeds(ns).Name  = Validate.ParameterName(name);
+this.Seeds(ns).Value = Validate.ParameterValue(value);
 
 this.Ready = false;

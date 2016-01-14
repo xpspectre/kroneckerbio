@@ -1,15 +1,15 @@
-function m = addOutputAsRegex(m, name, regex)
+function addOutputAsRegex(this, name, regex)
 %AddOutput Add an output to a Model.MassActionAmount using a regex. Note: this
 %   function is order-dependent, meaning it only matches species already in the
 %   model.
 %
-%   m = AddOutput(m, name, expressions)
+%   this.AddOutput(name, regex)
 %
 %   Outputs are linear combinations of species, with a possibly non-unity
 %   coefficient.
 %
 %   Inputs
-%   m: [ model struct scalar ]
+%   this: [ MassActionAmountModel ]
 %       The model to which the output will be added
 %   name: [ string ]
 %       A name for the output
@@ -24,17 +24,15 @@ function m = addOutputAsRegex(m, name, regex)
 %       Beware of species whose names are substrings of other species' or
 %       compartments' names. Beware: if multiple matches of a species are made, then
 %       that species will be counted multiple times.
-%
-%   Outputs
-%   m: [ model struct scalar ]
-%       The model with the new output added.
+
+import Validate.OutputExpressionMassAction
 
 % Clean arguments
-regex = fixOutputMassAction(regex);
+regex = Validate.OutputExpressionMassAction(regex);
 
 % Get list of species from model
-full_names = vec([strcat({m.States(1:m.nx).Compartment}, '.', {m.States(1:m.nx).Name}), ...
-    strcat({m.Inputs(1:m.nu).Compartment}, '.', {m.Inputs(1:m.nu).Name})]);
+full_names = vec([strcat({this.States(1:this.nx).Compartment}, '.', {this.States(1:this.nx).Name}), ...
+    strcat({this.Inputs(1:this.nu).Compartment}, '.', {this.Inputs(1:this.nu).Name})]);
 
 % Search species for matches
 nExpr = size(regex,1);
@@ -47,5 +45,5 @@ for i = 1:nExpr
 end
 
 % Add item
-m = addOutputMassActionAmount(m, name, expression);
+this.AddOutput(name, expression);
 

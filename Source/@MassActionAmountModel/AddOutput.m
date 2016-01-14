@@ -18,6 +18,8 @@ function AddOutput(this, name, expression)
 %       fully qualified with "compartment.species", including the double-quotes,
 %       or unqualified with species if the species is globally unique.
 
+import Validate.*
+
 % Clean up arguments
 if nargin < 3
     expression = [];
@@ -34,7 +36,7 @@ this.ny = ny;
 this.growOutputs;
 
 % Add item
-this.Outputs(ny).Name       = FieldValidator.OutputName(name);
-this.Outputs(ny).Expression = FieldValidator.OutputExpressionMassAction(expression);
+this.Outputs(ny).Name       = Validate.OutputName(name);
+this.Outputs(ny).Expression = Validate.OutputExpressionMassAction(expression);
 
 this.Ready = false;

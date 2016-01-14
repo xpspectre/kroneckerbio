@@ -17,13 +17,15 @@ function AddParameter(this, name, value)
 % TODO: rate parameter must be a nonnegative scalar for massaction models but
 % not for analytic models - generalize
 
+import Validate.*
+
 % Increment counter
 nk = this.nk + 1;
 this.nk = nk;
 this.growParameters;
 
 % Add item
-this.Parameters(nk).Name  = FieldValidator.ParameterName(name);
-this.Parameters(nk).Value = FieldValidator.ParameterValue(value);
+this.Parameters(nk).Name  = Validate.ParameterName(name);
+this.Parameters(nk).Value = Validate.ParameterValue(value);
 
 this.Ready = false;

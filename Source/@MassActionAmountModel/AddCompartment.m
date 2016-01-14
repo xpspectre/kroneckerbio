@@ -26,14 +26,16 @@ function AddCompartment(this, name, dimension, size)
 %       if the string is empty, then this row is a constant contribution to
 %       the compartment size.
 
+import Validate.*
+
 % Increment counter
 nv = this.nv + 1;
 this.nv = nv;
 this.growCompartments;
 
 % Add item
-this.Compartments(nv).Name      = FieldValidator.CompartmentName(name);
-this.Compartments(nv).Dimension = FieldValidator.CompartmentDimension(dimension);
-this.Compartments(nv).Size      = FieldValidator.CompartmentSizeMassAction(size, dimension);
+this.Compartments(nv).Name      = Validate.CompartmentName(name);
+this.Compartments(nv).Dimension = Validate.CompartmentDimension(dimension);
+this.Compartments(nv).Size      = Validate.CompartmentSizeMassAction(size, dimension);
 
 this.Ready = false;

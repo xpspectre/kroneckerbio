@@ -1,4 +1,4 @@
-classdef Model < handle & matlab.mixin.Heterogeneous
+classdef Model < handle & matlab.mixin.Heterogeneous & matlab.mixin.Copyable
     % Generic Model exposing common interface required of all models.
     % TODO: make abstract and specify public interface by making stuff private
     
@@ -54,11 +54,13 @@ classdef Model < handle & matlab.mixin.Heterogeneous
     
     methods
         function this = Model(name)
+            import Validate.ModelName
+            
             if nargin < 1
                 name = [];
             end
             
-            this.Name = FieldValidator.ModelName(name);
+            this.Name = Validate.ModelName(name);
             
             this.growCompartments;
             this.growParameters;

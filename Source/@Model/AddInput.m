@@ -12,6 +12,8 @@ function AddInput(this, name, compartment, default)
 %   default: [ nonnegative scalar {0} ]
 %       The default value for this input.
 
+import Validate.*
+
 if nargin < 4
     default = [];
 end
@@ -25,8 +27,8 @@ this.nu = nu;
 this.growInputs;
 
 % Add item
-this.Inputs(nu).Name         = FieldValidator.SpeciesName(name);
-this.Inputs(nu).Compartment  = FieldValidator.CompartmentName(compartment);
-this.Inputs(nu).DefaultValue = FieldValidator.InputDefaultValue(default);
+this.Inputs(nu).Name         = Validate.SpeciesName(name);
+this.Inputs(nu).Compartment  = Validate.CompartmentName(compartment);
+this.Inputs(nu).DefaultValue = Validate.InputDefaultValue(default);
 
 this.Ready = false;

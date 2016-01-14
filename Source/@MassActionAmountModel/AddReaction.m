@@ -43,6 +43,8 @@ function AddReaction(this, name, reactants, products, kForward, kReverse, compar
 %       compartment. The reactants and products that are disambiguated will
 %       also be disambiguated in forward and reverse expressions.
 
+import Validate.*
+
 % Clean-up
 if nargin < 7
     compartment = [];
@@ -56,15 +58,15 @@ if isempty(compartment)
 end
 
 % Standardize reaction name
-[nameForward, nameReverse] = FieldValidator.ReactionName(name);
+[nameForward, nameReverse] = Validate.ReactionName(name);
 
 % Standardize reactions and products
-reactants = FieldValidator.ReactionSpecies(reactants);
-products  = FieldValidator.ReactionSpecies(products);
+reactants = Validate.ReactionSpecies(reactants);
+products  = Validate.ReactionSpecies(products);
 
 % Standardize reaction rate parameters
-kForward  = FieldValidator.ReactionParameter(kForward);
-kReverse  = FieldValidator.ReactionParameter(kReverse);
+kForward  = Validate.ReactionParameter(kForward);
+kReverse  = Validate.ReactionParameter(kReverse);
 
 % Add separate reactions for forward and reverse (if applicable)
 if ~isempty(kForward{1})

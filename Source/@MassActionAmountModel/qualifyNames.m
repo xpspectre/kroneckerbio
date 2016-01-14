@@ -12,6 +12,8 @@ x_full_names = vec(strcat({this.States.Compartment}, '.', {this.States.Name}));
 u_full_names = vec(strcat({this.Inputs.Compartment}, '.', {this.Inputs.Name}));
 xu_full_names = [x_full_names; u_full_names];
 
+v_names = vec({this.Compartments.Name});
+
 %% Reactions with reaction compartments
 for i = 1:nr
     
@@ -25,7 +27,7 @@ for i = 1:nr
     
     % Make sure compartment exists in model if specified
     if ~isempty(compartment)
-        assert(ismember(compartment, m.v_names), 'KroneckerBio:FinalizeModel:MissingReactionCompartment', 'Compartment %s not found in reaction %s', compartment, name)
+        assert(ismember(compartment, v_names), 'KroneckerBio:MassActionAmountModel:qualifyNames:MissingReactionCompartment', 'Compartment %s not found in reaction %s', compartment, name)
     end
     
     % Get species that appear in reaction
@@ -47,6 +49,9 @@ for i = 1:nr
     this.Reactions(i)  = reaction;
     
 end
+
+%% Corner case of model with no reactions
+compartment = [];
 
 %% Outputs
 for i = 1:ny

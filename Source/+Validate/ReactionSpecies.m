@@ -23,8 +23,8 @@ if ischar(names)
 end
 
 % Check for valid names in cell array
-assert(~any(cellfun(@isempty, names)), 'KroneckerBio:FieldValidator:ReactionSpecies:InvalidBlankName', 'names may not mix strings and blanks');
-assert(iscellstr(names), 'KroneckerBio:FieldValidator:ReactionSpecies:InvalidName', 'names must be a cell array of strings or a string or empty')
+assert(~any(cellfun(@isempty, names)), 'KroneckerBio:Validate:ReactionSpecies:InvalidBlankName', 'Names may not mix strings and blanks');
+assert(iscellstr(names), 'KroneckerBio:Validate:ReactionSpecies:InvalidName', 'Names must be a cell array of strings or a string or empty')
 names = row(names);
 
 % Basic checks on species names:
@@ -32,6 +32,6 @@ names = row(names);
 %   Can't contain double quote "
 for i = 1:length(names)
     name_i = names{i};
-    assert(sum(ismember(name_i, '.')) < 2, 'KroneckerBio:FieldValidator:ReactionSpecies:InvalidNameDots', 'species name %s must have at most 1 dot, indicating a qualified compartment.species', name_i)
-    assert(~any(ismember(name_i, '"')), 'KroneckerBio:FieldValidator:ReactionSpecies:InvalidNameDoubleQuotes', 'species name %s must not contain double quotes', name_i)
+    assert(sum(ismember(name_i, '.')) < 2, 'KroneckerBio:Validate:ReactionSpecies:InvalidNameDots', 'Species name %s must have at most 1 dot, indicating a qualified compartment.species', name_i)
+    assert(~any(ismember(name_i, '"')), 'KroneckerBio:Validate:ReactionSpecies:InvalidNameDoubleQuotes', 'Species name %s must not contain double quotes', name_i)
 end

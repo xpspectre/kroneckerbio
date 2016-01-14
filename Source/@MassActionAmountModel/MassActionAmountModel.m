@@ -15,6 +15,9 @@ classdef MassActionAmountModel < Model
     
     methods
         function this = MassActionAmountModel(name)
+            if nargin < 1
+                name = [];
+            end
             this@Model(name);
         end
     end

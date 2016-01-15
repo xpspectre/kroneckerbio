@@ -64,13 +64,15 @@ if isempty(time_scale)
     time_scale = 10;
 end
 if isempty(s)
-    s = m.s;
+    s = [m.Seeds.Value]';
 end
 if isempty(basal_input)
-    basal_input = inputConstant(m, m.u);
+    u = [m.Inputs.DefaultValue]';
+    basal_input = inputConstant(m, u);
 end
 if isempty(inp)
-    inp = inputConstant(m, m.u);
+    u = [m.Inputs.DefaultValue]';
+    inp = inputConstant(m, u);
 end
 if isempty(dos)
     dos = doseZero(m);
@@ -80,13 +82,10 @@ if isempty(name)
 end
 
 % m
-assert(isscalar(m) && is(m, 'Model'), 'KroneckerBio:Experiment:m', 'm must be a Model')
-m = keepfields(m, {'Type', 's', 'u', 'ns', 'nu'});
-nu = m.nu;
+assert(isscalar(m) && isa(m, 'Model'), 'KroneckerBio:Experiment:m', 'm must be a Model')
 
 % s
 assert(numel(s) == m.ns, 'KroneckerBio:Experiment:s', 's must a vector with length equal to m.ns')
-s = vec(s);
 
 % inp
 if isnumeric(inp)

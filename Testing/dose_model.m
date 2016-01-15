@@ -1,7 +1,7 @@
 function [m, con, obj, opts] = dose_model()
 m = LoadModel('DoseModel.txt');
-m = addStatesAsOutputs(m);
-m = FinalizeModel(m);
+m.AddStatesAsOutputs;
+m.Finalize;
 
 dos0 = DoseConstant(m, 2, 0:3, 1);
 con0 = experimentInitialValue(m, [], [], dos0);

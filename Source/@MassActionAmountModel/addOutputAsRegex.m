@@ -1,5 +1,5 @@
-function addOutputAsRegex(this, name, regex)
-%AddOutput Add an output to a Model.MassActionAmount using a regex. Note: this
+function AddOutputAsRegex(this, name, regex)
+%AddOutputAsRegex Add an output to a Model.MassActionAmount using a regex. Note: this
 %   function is order-dependent, meaning it only matches species already in the
 %   model.
 %

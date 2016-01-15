@@ -30,6 +30,10 @@ for i = 1:nr
         assert(ismember(compartment, v_names), 'KroneckerBio:MassActionAmountModel:qualifyNames:MissingReactionCompartment', 'Compartment %s not found in reaction %s', compartment, name)
     end
     
+    % Make sure reactants and products are row vectors
+    reactants = row(reactants);
+    products = row(products);
+    
     % Get species that appear in reaction
     species = [reactants, products];
     

@@ -327,6 +327,10 @@ for iFile = 1:nFiles
                     products = tokens(3:4);
                     products = products(~strcmp(products, '0'));
                     
+                    % Make sure reactants and products are row vectors
+                    reactants = row(reactants);
+                    products = row(products);
+                    
                     % This is a normal line
                     m.AddReaction(tokens(7:end), reactants, products, parameters(1,:), parameters(2,:));
                 else

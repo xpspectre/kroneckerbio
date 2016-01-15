@@ -34,14 +34,14 @@ end
 
 % Build model
 m = LoadModelMassAction('Simple.txt');
-m = addStatesAsOutputs(m);
-m = AddOutput(m, 'all_ligand', 'ligand'); % interpreted as regex?
-m = FinalizeModel(m);
+m.AddStatesAsOutputs;
+m.AddOutputAsRegex('all_ligand', 'ligand');
+m.Finalize;
 
 ns = m.ns;
 nu = m.nu;
 
-defaultu = m.u;
+defaultu = m.m.u;
 
 % Input
 q = [1;4;3];

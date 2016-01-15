@@ -58,16 +58,12 @@ if isempty(name)
 end
 
 % m
-% assert(isscalar(m) && is(m, 'Model'), 'KroneckerBio:Experiment:m', 'm must be a Model')
-% m = keepfields(m, {'Type', 's', 'u', 'ns', 'nu'});
-% s = [m.Seeds.Value]';
-% u = [m.Inputs.DefaultValue]';
+assert(isscalar(m) && isa(m, 'Model'), 'KroneckerBio:Experiment:m', 'm must be a Model')
 ns = m.ns;
 nu = m.nu;
 
 % s
 assert(numel(s) == ns, 'KroneckerBio:Experiment:s', 's must a vector with length equal to m.ns')
-% s = vec(s);
 
 % inp
 if isnumeric(inp)

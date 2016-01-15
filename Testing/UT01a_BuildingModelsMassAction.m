@@ -282,7 +282,7 @@ end
 
 function testAddOutputAsRegex(a)
 m = model_with_some_species();
-m.addOutputAsRegex('y', {'x'});
+m.AddOutputAsRegex('y', {'x'});
 m.Finalize;
 a.verifyEqual(size(m.Outputs(1).Expression), [4,2])
 end

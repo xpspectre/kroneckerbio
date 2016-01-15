@@ -1,6 +1,8 @@
 function m = sbml2analytic(sbml)
 
-m = InitializeModelAnalytic(sbml.name);
+import Parser.*
+
+m = AnalyticModel(sbml.name);
 
 %% Extract components
 nv = numel(sbml.compartment);
@@ -173,18 +175,18 @@ r_products = cellfun(@(ri){[xu_full_names(lookupmember(ri(:,1),xu_ids)), ri(:,2)
 
 %% Add components to analytic model
 for iv = 1:nv
-    m = AddCompartment(m, v_names{iv}, v_dims(iv), v_sizes{iv});
+    m.AddCompartment(v_names{iv}, v_dims(iv), v_sizes{iv});
 end
 
 for ik = 1:nk
-    m = AddParameter(m, k_names{ik}, k_values(ik));
+    m.AddParameter(k_names{ik}, k_values(ik));
 end
 
 for ixu = 1:nxu
     if xu_is_inputs(ixu)
-        m = AddInput(m, xu_names{ixu}, vxu_names{ixu}, xu_values{ixu});
+        m.AddInput(xu_names{ixu}, vxu_names{ixu}, xu_values{ixu});
     else
-        m = AddState(m, xu_names{ixu}, vxu_names{ixu}, xu_values{ixu});
+        m.AddState(xu_names{ixu}, vxu_names{ixu}, xu_values{ixu});
     end
 end
 
@@ -192,11 +194,11 @@ for ir = 1:numel(sbml.reaction)
     reactants_i = expand_reactants(r_reactants{ir});
     products_i = expand_reactants(r_products{ir});
     
-    m = AddReaction(m, r_names{ir}, reactants_i, products_i, r_rates{ir});
+    m.AddReaction(r_names{ir}, reactants_i, products_i, r_rates{ir});
 end
 
 for iz = 1:nz
-    m = AddRule(m, z_names{iz}, z_values{iz});
+    m.AddRule(z_names{iz}, z_values{iz});
 end
 
 assert(isempty(sbml.functionDefinition), 'KroneckerBio:SBML:functions', 'Model contains a function definition that is not surrently supported.')

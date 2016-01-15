@@ -4,10 +4,10 @@ m = LoadModelSbmlAnalytic('simple_analytic.xml');
 
 % Convert kinetic parameter to seed
 ind = lookupmember('growth_factor_injection', {m.Parameters(1:m.nk).Name});
-m = AddSeed(m, 'growth_factor_injection', 8);
-m = RemoveParameter(m, 'growth_factor_injection');
-m = addStatesAsOutputs(m);
-m = FinalizeModel(m);
+m.AddSeed('growth_factor_injection', 8);
+m.RemoveParameter('growth_factor_injection');
+m.AddStatesAsOutputs;
+m.Finalize;
 
 dos = DoseConstant(m, 8, [10,20]);
 inp = inputConstant(m, 2.5);

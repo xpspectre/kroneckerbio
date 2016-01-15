@@ -645,6 +645,8 @@ if verbose; fprintf('done.\n'); end
 
     function m = final(m)
         
+        k = m.k; % Needed to make sure update uses the new k
+        
         % Update function handles
         m.x0            = setfun_x0(x0,k);
         m.f             = setfun_rf(f,k);

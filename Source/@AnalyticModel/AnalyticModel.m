@@ -2,7 +2,7 @@ classdef AnalyticModel < Model
     
     methods (Access = protected)
         qualifyNames(this)
-        calculateDerivatives(this)
+        calculateDerivatives(this, opts)
     end
     
     methods

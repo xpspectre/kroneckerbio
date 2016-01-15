@@ -22,6 +22,8 @@ function valid = isValidSymbolicModel(s, detailed)
 % TODO: if this function remains fast, put in all model conversion code as
 %   a sanity check
 
+import Util.*
+
 if nargin < 2
     detailed = false;
 end

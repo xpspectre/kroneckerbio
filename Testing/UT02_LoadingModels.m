@@ -21,7 +21,7 @@ function testBasicSBMLLoading(a)
 opts = [];
 opts.UseNames = true;
 m = LoadModelSbmlAnalytic('test.xml', opts);
-m = FinalizeModel(m);
+m.Finalize;
 
 a.verifyEqual(m.nv, 1);
 a.verifyEqual(m.nk, 3);
@@ -36,16 +36,16 @@ end
 function testEnzymeSBMLLoading(a)
 m = LoadModelSbmlAnalytic('enzyme-catalysis-basic.xml');
 
-m = AddOutput(m, 'complex', '"E:S"');
-m = AddOutput(m, 'product', '"S#P"');
-m = AddOutput(m, 'modified_product', '1.5*"S#P"');
-m = AddOutput(m, 'random_y', '"E:S" + sqrt("S")');
+m.AddOutput('complex', '"E:S"');
+m.AddOutput('product', '"S#P"');
+m.AddOutput('modified_product', '1.5*"S#P"');
+m.AddOutput('random_y', '"E:S" + sqrt("S")');
 
 a.verifyEqual(m.ny, 4);
 a.verifyEqual(m.Outputs(1).Name, 'complex');
 a.verifyEqual(m.Outputs(1).Expression, '"E:S"');
 
-m = FinalizeModel(m);
+m.Finalize;
 
 % Random values
 t = 10*rand;
@@ -58,7 +58,7 @@ y3 = 1.5*x(4);
 y4 = x(2) + sqrt(x(3));
 yExpected = [y1 y2 y3 y4]';
 
-a.verifyEqual(m.y(t,x,u), yExpected);
+a.verifyEqual(m.m.y(t,x,u), yExpected);
 
 verifyDerivatives(a, m);
 end
@@ -72,13 +72,14 @@ function testHigherOrderDose(a)
 m = higher_order_dose_model();
 verifyDerivatives(a, m);
 
-a.verifyEqual(m.x0([4;5]), [16;28;4;20;6])
-a.verifyEqual(m.dx0ds([4;5]), sparse([8,0;7,0;0,0;5,4;0,0]))
-a.verifyEqual(m.dx0dk([4;5]), sparse([0,0,0;0,0,4;4,0,0;0,0,0;3,2,0]))
-a.verifyEqual(m.d2x0ds2([4;5]), sparse([1,9,4], [1,1,2], [2,1,1], 10, 2))
-a.verifyEqual(m.d2x0dk2([4;5]), sparse([3,10,5], [1,1,2], [2,1,1], 15, 3))
-a.verifyEqual(m.d2x0dkds([4;5]), sparse([2],[3],[1],10,3))
-a.verifyEqual(m.d2x0dsdk([4;5]), sparse([12],[1],[1],15,2))
+m_ = m.m;
+a.verifyEqual(m_.x0([4;5]), [16;28;4;20;6])
+a.verifyEqual(m_.dx0ds([4;5]), sparse([8,0;7,0;0,0;5,4;0,0]))
+a.verifyEqual(m_.dx0dk([4;5]), sparse([0,0,0;0,0,4;4,0,0;0,0,0;3,2,0]))
+a.verifyEqual(m_.d2x0ds2([4;5]), sparse([1,9,4], [1,1,2], [2,1,1], 10, 2))
+a.verifyEqual(m_.d2x0dk2([4;5]), sparse([3,10,5], [1,1,2], [2,1,1], 15, 3))
+a.verifyEqual(m_.d2x0dkds([4;5]), sparse([2],[3],[1],10,3))
+a.verifyEqual(m_.d2x0dsdk([4;5]), sparse([12],[1],[1],15,2))
 end
 
 function testSimpleMassActionSBMLLoading(a)
@@ -86,7 +87,7 @@ warning('off', 'symbolic2massaction:repeatedSpeciesNames'); % suppress warning f
 m = LoadModelSbmlMassAction('simple_massaction.xml');
 warning('on', 'symbolic2massaction:repeatedSpeciesNames'); % reenable warning for continued session
 
-m = FinalizeModel(m);
+m.Finalize;
 
 verifyDerivatives(a, m);
 end
@@ -95,7 +96,7 @@ function testSimpleMassActionAsAnalyticSBMLLoading(a)
 opts = [];
 opts.EvaluateExternalFunctions = true; % simple_massaction has x^2 terms, and power needs to be evaluated
 m = LoadModelSbmlAnalytic('simple_massaction.xml');
-m = FinalizeModel(m, opts);
+m.Finalize(opts);
 
 verifyDerivatives(a, m);
 end
@@ -113,15 +114,16 @@ warning('off', 'symbolic2massaction:repeatedSpeciesNames'); % suppress warning f
 m = LoadModelSimBioMassAction(simbiomodel);
 warning('on', 'symbolic2massaction:repeatedSpeciesNames'); % reenable warning for continued session
 
-m = FinalizeModel(m);
+m.Finalize;
 
 verifyDerivatives(a, m);
 end
 
-function verifyDerivatives(a, m)
-% TODO: replace this with a version that makes sense`
+function verifyDerivatives(a, min)
+% TODO: replace this with a version that makes sense
 % Make all the values about the same size
 rng('default');
+m = copy(min); % Make sure verifyDerivatives doesn't change the input model
 x0 = rand(m.nx,1) + 1;
 u0 = rand(m.nu,1) + 1;
 k0 = rand(m.nk,1) + 1;

@@ -24,6 +24,8 @@ function m = symbolic2massaction(symbolic, opts)
 % finish for large models. Consider abstracting these cases into a external
 % function and optimizing.
 
+import Util.*
+
 if nargin < 2
     opts = [];
 end
@@ -69,7 +71,7 @@ end
 if verbose; fprintf('Adding components to mass action model...'); end
 
 % Initialize model
-m = InitializeModelMassActionAmount(symbolic.Name);
+m = MassActionAmountModel(symbolic.Name);
 
 %% Compartments
 nv     = symbolic.nv;
@@ -78,7 +80,7 @@ vIDs   = symbolic.vIDs;
 v      = symbolic.v; % doubles
 dv     = symbolic.dv;
 for i = 1:nv
-    m = AddCompartment(m, vNames{i}, dv(i), v(i));
+    m.AddCompartment(vNames{i}, dv(i), v(i));
 end
 
 %% Parameters
@@ -87,7 +89,7 @@ kNames = symbolic.kNames;
 kIDs   = symbolic.kIDs;
 k      = symbolic.k; % doubles
 for i = 1:nk
-    m = AddParameter(m, kNames{i}, k(i));
+    m.AddParameter(kNames{i}, k(i));
 end
 
 %% States, Seeds, and Inputs
@@ -158,15 +160,15 @@ for i = 1:nx
         seeds = [sNames(seedInds), mat2cell(seedCoefs(seedInds), ones(nnz(seedInds),1))]; % make nSeeds x 2
     end
     
-    m = AddState(m, xNamesNew{i}, xvNames{i}, seeds);
+    m.AddState(xNamesNew{i}, xvNames{i}, seeds);
 end
 
 for i = 1:nu
-    m = AddInput(m, uNamesNew{i}, uvNames{i}, u(i));
+    m.AddInput(uNamesNew{i}, uvNames{i}, u(i));
 end
 
 for i = 1:ns
-    m = AddSeed(m, sNames{i}, s(i));
+    m.AddSeed(sNames{i}, s(i));
 end
 
 if verbose; fprintf('done.\n'); end
@@ -247,11 +249,11 @@ for i = 1:nr
                         switch nProd
                             case 0
                                 % Pointless reaction
-                                m = AddReaction(m, name, {}, {}, kNames{kPos(iMic)});
+                                m.AddReaction(name, {}, {}, kNames{kPos(iMic)});
                             case 1
-                                m = AddReaction(m, name, {}, xuNamesNew{prod}, kNames{kPos(iMic)});
+                                m.AddReaction(name, {}, xuNamesNew{prod}, kNames{kPos(iMic)});
                             case 2
-                                m = AddReaction(m, name, {}, {xuNamesNew{prod(1)}, xuNamesNew{prod(2)}}, kNames{kPos(iMic)});
+                                m.AddReaction(name, {}, {xuNamesNew{prod(1)}, xuNamesNew{prod(2)}}, kNames{kPos(iMic)});
                         end
                     case -1
                         % Add zeroth order synthesis reverse
@@ -261,11 +263,11 @@ for i = 1:nr
                         switch nReac
                             case 0
                                 % Pointless reaction
-                                m = AddReaction(m, name, {}, {}, kNames{kPos(iMic)});
+                                m.AddReaction(name, {}, {}, kNames{kPos(iMic)});
                             case 1
-                                m = AddReaction(m, name, {}, xuNamesNew{reac}, kNames{kPos(iMic)});
+                                m.AddReaction(name, {}, xuNamesNew{reac}, kNames{kPos(iMic)});
                             case 2
-                                m = AddReaction(m, name, {}, {xuNamesNew{reac(1)}, xuNamesNew{reac(2)}}, kNames{kPos(iMic)});
+                                m.AddReaction(name, {}, {xuNamesNew{reac(1)}, xuNamesNew{reac(2)}}, kNames{kPos(iMic)});
                         end
                     otherwise
                         error('KroneckerBio:symbolic2MassAction:ZerothOrderCheck', 'Reaction rate %i has a zeroth-order term that failed a sanity check', i)
@@ -286,11 +288,11 @@ for i = 1:nr
                         % Switch on number of products
                         switch nProd
                             case 0
-                                m = AddReaction(m, name, xuNamesNew{xuMicPos}, {}, kNames{kPos(iMic)});
+                                m.AddReaction(name, xuNamesNew{xuMicPos}, {}, kNames{kPos(iMic)});
                             case 1
-                                m = AddReaction(m, name, xuNamesNew{xuMicPos}, xuNamesNew{prod}, kNames{kPos(iMic)});
+                                m.AddReaction(name, xuNamesNew{xuMicPos}, xuNamesNew{prod}, kNames{kPos(iMic)});
                             case 2
-                                m = AddReaction(m, name, xuNamesNew{xuMicPos}, {xuNamesNew{prod(1)}, xuNamesNew{prod(2)}}, kNames{kPos(iMic)});
+                                m.AddReaction(name, xuNamesNew{xuMicPos}, {xuNamesNew{prod(1)}, xuNamesNew{prod(2)}}, kNames{kPos(iMic)});
                         end
                     elseif derMic == -1
                         % Add first order reverse
@@ -299,11 +301,11 @@ for i = 1:nr
                         % Switch on number of "reactants"
                         switch nReac
                             case 0
-                                m = AddReaction(m, name, xuNamesNew{xuMicPos}, {}, kNames{kPos(iMic)});
+                                m.AddReaction(name, xuNamesNew{xuMicPos}, {}, kNames{kPos(iMic)});
                             case 1
-                                m = AddReaction(m, name, xuNamesNew{xuMicPos}, xuNamesNew{reac}, kNames{kPos(iMic)});
+                                m.AddReaction(name, xuNamesNew{xuMicPos}, xuNamesNew{reac}, kNames{kPos(iMic)});
                             case 2
-                                m = AddReaction(m, name, xuNamesNew{xuMicPos}, {xuNamesNew{reac(1)}, xuNamesNew{reac(2)}}, kNames{kPos(iMic)});
+                                m.AddReaction(name, xuNamesNew{xuMicPos}, {xuNamesNew{reac(1)}, xuNamesNew{reac(2)}}, kNames{kPos(iMic)});
                         end
                     end
                 else
@@ -328,7 +330,7 @@ for i = 1:nr
                                 kBaked(kPos(iMic)) = vPosMic;
                                 
                                 % Replace the old parameter value
-                                m = AddParameter(m, kNames{kPos(iMic)}, k(kPos(iMic)) * v(vPosMic));
+                                m.AddParameter(kNames{kPos(iMic)}, k(kPos(iMic)) * v(vPosMic));
                             end
                         case 1
                             % Compartment is written in the equation
@@ -348,11 +350,11 @@ for i = 1:nr
                             % Switch on number of products
                             switch nProd
                                 case 0
-                                    m = AddReaction(m, name, {xuNamesNew{xuMicPos}, xuNamesNew{xuMicPos}}, {}, kNames{kPos(iMic)});
+                                    m.AddReaction(name, {xuNamesNew{xuMicPos}, xuNamesNew{xuMicPos}}, {}, kNames{kPos(iMic)});
                                 case 1
-                                    m = AddReaction(m, name, {xuNamesNew{xuMicPos}, xuNamesNew{xuMicPos}}, xuNamesNew{prod}, kNames{kPos(iMic)});
+                                    m.AddReaction(name, {xuNamesNew{xuMicPos}, xuNamesNew{xuMicPos}}, xuNamesNew{prod}, kNames{kPos(iMic)});
                                 case 2
-                                    m = AddReaction(m, name, {xuNamesNew{xuMicPos}, xuNamesNew{xuMicPos}}, {xuNamesNew{prod(1)}, xuNamesNew{prod(2)}}, kNames{kPos(iMic)});
+                                    m.AddReaction(name, {xuNamesNew{xuMicPos}, xuNamesNew{xuMicPos}}, {xuNamesNew{prod(1)}, xuNamesNew{prod(2)}}, kNames{kPos(iMic)});
                             end
                         case -2
                             % Add second order reverse
@@ -361,11 +363,11 @@ for i = 1:nr
                             % Switch on number of "reactants"
                             switch nReac
                                 case 0
-                                    m = AddReaction(m, name, {xuNamesNew{xuMicPos}, xuNamesNew{xuMicPos}}, {}, kNames{kPos(iMic)});
+                                    m.AddReaction(name, {xuNamesNew{xuMicPos}, xuNamesNew{xuMicPos}}, {}, kNames{kPos(iMic)});
                                 case 1
-                                    m = AddReaction(m, name, {xuNamesNew{xuMicPos}, xuNamesNew{xuMicPos}}, xuNamesNew{reac}, kNames{kPos(iMic)});
+                                    m.AddReaction(name, {xuNamesNew{xuMicPos}, xuNamesNew{xuMicPos}}, xuNamesNew{reac}, kNames{kPos(iMic)});
                                 case 2
-                                    m = AddReaction(m, name, {xuNamesNew{xuMicPos}, xuNamesNew{xuMicPos}}, {xuNamesNew{reac(1)}, xuNamesNew{reac(2)}}, kNames{kPos(iMic)});
+                                    m.AddReaction(name, {xuNamesNew{xuMicPos}, xuNamesNew{xuMicPos}}, {xuNamesNew{reac(1)}, xuNamesNew{reac(2)}}, kNames{kPos(iMic)});
                             end
                         otherwise
                             error('KroneckerBio:symbolic2MassAction:FirstOrderCheck', 'Reaction rate %i has a single species term that failed a sanity check', i)
@@ -399,7 +401,7 @@ for i = 1:nr
                             kBaked(kPos(iMic)) = vPosMic;
                             
                             % Replace the old parameter value
-                            m = AddParameter(m, kNames{kPos(iMic)}, k(kPos(iMic)) * v(vPosMic));
+                            m.AddParameter(kNames{kPos(iMic)}, k(kPos(iMic)) * v(vPosMic));
                         end
                     case 1
                         % Compartment is written in the equation
@@ -418,11 +420,11 @@ for i = 1:nr
                         % Switch on number of products
                         switch nProd
                             case 0
-                                m = AddReaction(m, name, {xuNamesNew{xuMicPos(1)}, xuNamesNew{xuMicPos(2)}}, {}, kNames{kPos(iMic)});
+                                m.AddReaction(name, {xuNamesNew{xuMicPos(1)}, xuNamesNew{xuMicPos(2)}}, {}, kNames{kPos(iMic)});
                             case 1
-                                m = AddReaction(m, name, {xuNamesNew{xuMicPos(1)}, xuNamesNew{xuMicPos(2)}}, xuNamesNew{prod}, kNames{kPos(iMic)});
+                                m.AddReaction(name, {xuNamesNew{xuMicPos(1)}, xuNamesNew{xuMicPos(2)}}, xuNamesNew{prod}, kNames{kPos(iMic)});
                             case 2
-                                m = AddReaction(m, name, {xuNamesNew{xuMicPos(1)}, xuNamesNew{xuMicPos(2)}}, {xuNamesNew{prod(1)}, xuNamesNew{prod(2)}}, kNames{kPos(iMic)});
+                                m.AddReaction(name, {xuNamesNew{xuMicPos(1)}, xuNamesNew{xuMicPos(2)}}, {xuNamesNew{prod(1)}, xuNamesNew{prod(2)}}, kNames{kPos(iMic)});
                         end
                     case -1
                         % Add second order reverse
@@ -431,11 +433,11 @@ for i = 1:nr
                         % Switch on number of "reactants"
                         switch nReac
                             case 0
-                                m = AddReaction(m, name, {xuNamesNew{xuMicPos(1)}, xuNamesNew{xuMicPos(2)}}, {}, kNames{kPos(iMic)});
+                                m.AddReaction(name, {xuNamesNew{xuMicPos(1)}, xuNamesNew{xuMicPos(2)}}, {}, kNames{kPos(iMic)});
                             case 1
-                                m = AddReaction(m, name, {xuNamesNew{xuMicPos(1)}, xuNamesNew{xuMicPos(2)}}, xuNamesNew{reac}, kNames{kPos(iMic)});
+                                m.AddReaction(name, {xuNamesNew{xuMicPos(1)}, xuNamesNew{xuMicPos(2)}}, xuNamesNew{reac}, kNames{kPos(iMic)});
                             case 2
-                                m = AddReaction(m, name, {xuNamesNew{xuMicPos(1)}, xuNamesNew{xuMicPos(2)}}, {xuNamesNew{reac(1)}, xuNamesNew{reac(2)}}, kNames{kPos(iMic)});
+                                m.AddReaction(name, {xuNamesNew{xuMicPos(1)}, xuNamesNew{xuMicPos(2)}}, {xuNamesNew{reac(1)}, xuNamesNew{reac(2)}}, kNames{kPos(iMic)});
                         end
                     otherwise
                         error('KroneckerBio:symbolic2MassAction:SecondOrderCheck', 'Reaction rate %i has a double species term that failed a sanity check', i)

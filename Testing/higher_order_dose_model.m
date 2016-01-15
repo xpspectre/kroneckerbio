@@ -1,18 +1,18 @@
 function [m, con, obj, opts] = higher_order_dose_model()
-m = InitializeModelAnalytic();
-m = AddCompartment(m, 'v', 3, 1);
-m = AddState(m, 'x1', 'v', 's1^2');
-m = AddState(m, 'x2', 'v', 's1*k3');
-m = AddState(m, 'x3', 'v', 'k1^2');
-m = AddState(m, 'x4', 'v', 's1*s2');
-m = AddState(m, 'x5', 'v', 'k1*k2');
-m = AddSeed(m, 's1', 0);
-m = AddSeed(m, 's2', 0);
-m = AddParameter(m, 'k1', 2);
-m = AddParameter(m, 'k2', 3);
-m = AddParameter(m, 'k3', 7);
-m = addStatesAsOutputs(m);
-m = FinalizeModel(m);
+m = AnalyticModel();
+m.AddCompartment('v', 3, 1);
+m.AddState('x1', 'v', 's1^2');
+m.AddState('x2', 'v', 's1*k3');
+m.AddState('x3', 'v', 'k1^2');
+m.AddState('x4', 'v', 's1*s2');
+m.AddState('x5', 'v', 'k1*k2');
+m.AddSeed('s1', 0);
+m.AddSeed('s2', 0);
+m.AddParameter('k1', 2);
+m.AddParameter('k2', 3);
+m.AddParameter('k3', 7);
+m.AddStatesAsOutputs;
+m.Finalize;
 
 dos = DoseConstant(m, [5,8], 2:10);
 con = experimentInitialValue(m, [], [], dos);

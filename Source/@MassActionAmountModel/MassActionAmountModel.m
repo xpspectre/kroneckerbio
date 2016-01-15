@@ -7,13 +7,6 @@ classdef MassActionAmountModel < Model
     end
     
     methods
-        AddCompartment(this, name, dimension, size)
-        AddState(this, name, compartment, ic)
-        AddOutput(this, name, expression)
-        AddReaction(this, name, reactants, products, kForward, kReverse, compartment)
-    end
-    
-    methods
         function this = MassActionAmountModel(name)
             if nargin < 1
                 name = [];

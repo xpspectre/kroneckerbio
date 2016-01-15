@@ -627,93 +627,11 @@ m.vuInd = vuInd;
 
 clear vNames kNames sNames uNames xNames rNames yNames yMembers yValues
 
-m.f         = setfun_rf(f,k);
-
-if order >= 1
-    m.dfdx      = setfun_rf(dfdx,k);
-    m.dfdk      = setfun_rf(dfdk,k);
-    m.dfdu      = setfun_rf(dfdu,k);
-end
-
-if order >= 2
-    m.d2fdx2    = setfun_rf(d2fdx2,k);
-    m.d2fdu2    = setfun_rf(d2fdu2,k);
-    m.d2fdk2    = setfun_rf(d2fdk2,k);
-    m.d2fdudx   = setfun_rf(d2fdudx,k);
-    m.d2fdxdu   = setfun_rf(d2fdxdu,k);
-    m.d2fdkdx   = setfun_rf(d2fdkdx,k);
-    m.d2fdkdu   = setfun_rf(d2fdkdu,k);
-    m.d2fdxdk   = setfun_rf(d2fdxdk,k);
-    m.d2fdudk   = setfun_rf(d2fdudk,k);
-end
-
-if order >= 3
-    m.d3fdx3    = setfun_rf(d3fdx3,k);
-    m.d3fdkdx2  = setfun_rf(d3fdkdx2,k);
-end
-
 m.S = S;
-m.r = setfun_rf(r,k);
-
-if order >= 1
-    m.drdx      = setfun_rf(drdx,k);
-    m.drdk      = setfun_rf(drdk,k);
-    m.drdu      = setfun_rf(drdu,k);
-end
-
-if order >= 2
-    m.d2rdx2    = setfun_rf(d2rdx2,k);
-    m.d2rdu2    = setfun_rf(d2rdu2,k);
-    m.d2rdk2    = setfun_rf(d2rdk2,k);
-    m.d2rdudx   = setfun_rf(d2rdudx,k);
-    m.d2rdxdu   = setfun_rf(d2rdxdu,k);
-    m.d2rdkdx   = setfun_rf(d2rdkdx,k);
-    m.d2rdkdu   = setfun_rf(d2rdkdu,k);
-    m.d2rdxdk   = setfun_rf(d2rdxdk,k);
-    m.d2rdudk   = setfun_rf(d2rdudk,k);
-end
-
-m.y = setfun_y(y,true,k,ny);
-
-if order >= 1
-    m.dydx      = setfun_y(dydx,false,k,ny);
-    m.dydu      = setfun_y(dydu,false,k,ny);
-    m.dydk      = setfun_y(dydk,false,k,ny);
-end
-
-if order >= 2
-    m.d2ydx2    = setfun_y(d2ydx2,false,k,ny);
-    m.d2ydu2    = setfun_y(d2ydu2,false,k,ny);
-    m.d2ydk2    = setfun_y(d2ydk2,false,k,ny);
-    m.d2ydudx   = setfun_y(d2ydudx,false,k,ny);
-    m.d2ydkdx   = setfun_y(d2ydkdx,false,k,ny);
-    m.d2ydxdu   = setfun_y(d2ydxdu,false,k,ny);
-    m.d2ydkdu   = setfun_y(d2ydkdu,false,k,ny);
-    m.d2ydxdk   = setfun_y(d2ydxdk,false,k,ny);
-    m.d2ydudk   = setfun_y(d2ydudk,false,k,ny);
-end
-
-m.x0            = setfun_x0(x0,k);
-
-if order >= 1
-    m.dx0ds     = setfun_x0(dx0ds,k);
-    m.dx0dk     = setfun_x0(dx0dk,k);
-end
-
-if order >= 2
-    m.d2x0ds2   = setfun_x0(d2x0ds2,k);
-    m.d2x0dk2   = setfun_x0(d2x0dk2,k);
-    m.d2x0dkds  = setfun_x0(d2x0dkds,k);
-    m.d2x0dsdk  = setfun_x0(d2x0dsdk,k);
-end
-
-if order >= 3
-    m.d3x0ds3   = setfun_x0(d3x0ds3);
-end
 
 %% Reassign internal property
+m = final(m); % redundant with some of the above? remove above terms
 this.m = m;
-this.Update = @updateModel;
 this.Ready = true;
 
 if verbose; fprintf('done.\n'); end
@@ -721,19 +639,11 @@ if verbose; fprintf('done.\n'); end
 % End of function
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%% %%%%%%%%%%%%%%%%%%%%%%%%
-%%%%% Update function %%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%% Finalize and update %%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-    function updateModel(newk)
-        % Apply changes
-        m = this.m;
-        k = newk;
-        
-        k_assign = num2cell(k);
-        [this.Parameters.Value] = k_assign{:};
-        
-        m.k  = k;
+    function m = final(m)
         
         % Update function handles
         m.x0            = setfun_x0(x0,k);
@@ -792,9 +702,21 @@ if verbose; fprintf('done.\n'); end
         if order >= 3
             m.d3fdx3    = setfun_rf(d3fdx3,k);
             m.d3fdkdx2  = setfun_rf(d3fdkdx2,k);
+            m.d3x0ds3   = setfun_x0(d3x0ds3);
         end
         
-        this.m = m;
+        m.Update = @updateModel;
+        
+        function mout = updateModel(k)
+            % Copy existing model
+            mout = m;
+            
+            % Apply changes
+            mout.k = vec(k);
+            
+            % Rebuild model
+            mout = final(mout);
+        end
         
     end
 

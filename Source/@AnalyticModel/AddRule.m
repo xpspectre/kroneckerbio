@@ -12,6 +12,8 @@ function AddRule(this, name, expression, type)
 %   type [ {'repeated assignment'} | 'initial assignment' | 'rate' ]
 %       Rule type, taken from SBML spec.
 
+import Validate.*
+
 % Clean up inputs
 if nargin < 5
     type = 'repeated assignment';
@@ -28,7 +30,7 @@ this.growRules;
 
 % Add item
 this.Rules(nz).Name       = name;
-this.Rules(nz).Expression = FieldValidator.RuleExpression(expression);
+this.Rules(nz).Expression = Validate.RuleExpression(expression);
 this.Rules(nz).Type       = type;
 
 this.Ready = false;

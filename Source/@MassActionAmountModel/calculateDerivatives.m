@@ -855,8 +855,9 @@ D5UsedColumns = vec(unique(D5UsedColumns));
 [D5UsedSpecies2, D5UsedSpecies1] = ind2sub([nu,nu], D5UsedColumns);
 
 %% Final build of model
-m = final(m, D2UsedColumns, D2UsedSpecies1, D2UsedSpecies2, D3UsedColumns, D3UsedSpecies1, D3UsedSpecies2, D4UsedColumns, D4UsedSpecies1, D4UsedSpecies2, D5UsedColumns, D5UsedSpecies1, D5UsedSpecies2, this);
+m = final(m, D2UsedColumns, D2UsedSpecies1, D2UsedSpecies2, D3UsedColumns, D3UsedSpecies1, D3UsedSpecies2, D4UsedColumns, D4UsedSpecies1, D4UsedSpecies2, D5UsedColumns, D5UsedSpecies1, D5UsedSpecies2);
 this.m = m;
+this.Ready = true;
 
 % End of function
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -973,7 +974,10 @@ this.m = m;
     end
 end
 
-function m = final(m, D2UsedColumns, D2UsedSpecies1, D2UsedSpecies2, D3UsedColumns, D3UsedSpecies1, D3UsedSpecies2, D4UsedColumns, D4UsedSpecies1, D4UsedSpecies2, D5UsedColumns, D5UsedSpecies1, D5UsedSpecies2, this)
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%% Finalize and update %%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function m = final(m, D2UsedColumns, D2UsedSpecies1, D2UsedSpecies2, D3UsedColumns, D3UsedSpecies1, D3UsedSpecies2, D4UsedColumns, D4UsedSpecies1, D4UsedSpecies2, D5UsedColumns, D5UsedSpecies1, D5UsedSpecies2)
 
 % Constants
 % nx = this.nx;
@@ -1036,26 +1040,17 @@ m.d2rdxdk = d2rdxdkHidden(m.dD1dk_rk_x, m.dD2dk_rk_xx, m.dD3dk_rk_ux, m.dD4dk_rk
 m.d2rdkdu = d2rdkduHidden(m.dD2dk_rk_xx, m.dD3dk_rk_ux, m.dD4dk_rk_xu, m.dD5dk_rk_uu, m.dD6dk_rk_u, m.v, m.dvdu, D2UsedColumns, D2UsedSpecies1, D2UsedSpecies2, D3UsedColumns, D3UsedSpecies1, D3UsedSpecies2, D4UsedColumns, D4UsedSpecies1, D4UsedSpecies2, D5UsedColumns, D5UsedSpecies1, D5UsedSpecies2, m.vxInd, m.vuInd, nr);
 m.d2rdudk = d2rdudkHidden(m.dD2dk_rk_xx, m.dD3dk_rk_ux, m.dD4dk_rk_xu, m.dD5dk_rk_uu, m.dD6dk_rk_u, m.v, m.dvdu, D2UsedColumns, D2UsedSpecies1, D2UsedSpecies2, D3UsedColumns, D3UsedSpecies1, D3UsedSpecies2, D4UsedColumns, D4UsedSpecies1, D4UsedSpecies2, D5UsedColumns, D5UsedSpecies1, D5UsedSpecies2, m.vxInd, m.vuInd);
 
-this.Ready = true;
-this.Update = @updateModel;
+m.Update = @updateModel;
 
-    function updateModel(k)
+    function mout = updateModel(k)
         % Copy existing model
-        mout = this.m;
+        mout = m;
         
         % Apply changes
         mout.k = vec(k);
         
-        % Distribute values
-        if this.nk >= 1
-            k = num2cell(k);
-            [this.Parameters.Value] = k{:};
-        end
-        
         % Rebuild model
-        mout = final(mout, D2UsedColumns, D2UsedSpecies1, D2UsedSpecies2, D3UsedColumns, D3UsedSpecies1, D3UsedSpecies2, D4UsedColumns, D4UsedSpecies1, D4UsedSpecies2, D5UsedColumns, D5UsedSpecies1, D5UsedSpecies2, this);
-        
-        this.m = mout;
+        mout = final(mout, D2UsedColumns, D2UsedSpecies1, D2UsedSpecies2, D3UsedColumns, D3UsedSpecies1, D3UsedSpecies2, D4UsedColumns, D4UsedSpecies1, D4UsedSpecies2, D5UsedColumns, D5UsedSpecies1, D5UsedSpecies2);
     end
 end
 

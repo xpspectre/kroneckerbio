@@ -15,7 +15,6 @@ classdef Model < handle & matlab.mixin.Heterogeneous & matlab.mixin.Copyable
         
         m % public for testing/debugging for now
         
-        Update % function handle
         Ready
         
         nv = 0
@@ -38,18 +37,10 @@ classdef Model < handle & matlab.mixin.Heterogeneous & matlab.mixin.Copyable
         growReactions(this)
         growOutputs(this)
         growRules(this)
-%         initialize(this)
         
         qualifyNames(this)
         extractSpecies(this) % rename this
         calculateDerivatives(this)
-    end
-    
-    methods
-        AddSeed(this, name, value)
-        AddInput(this, name, compartment, default)
-        AddParameter(this, name, value)
-        Finalize(this)
     end
     
     methods

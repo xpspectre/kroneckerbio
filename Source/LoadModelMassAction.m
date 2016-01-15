@@ -24,7 +24,7 @@ function m = LoadModelMassAction(files)
 % This work is released under the MIT license.
 
 %% Initialize the model
-m = InitializeModelMassActionAmount('');
+m = MassActionAmountModel('');
 
 % Standardize files a cell vector of strings
 if ischar(files)
@@ -80,7 +80,7 @@ for iFile = 1:nFiles
                 % Extract model name
                 modelName = regexp(payload, '".*"|[^\s]*', 'match', 'once');
                 modelName = regexp(modelName, '[^"]*', 'match', 'once'); % Strip quotes
-                m = RenameModel(m, modelName);
+                m.Rename(modelName);
             elseif strcmpi(match, 'inputs')
                 % Switch mode
                 mode = 2;
@@ -150,7 +150,7 @@ for iFile = 1:nFiles
                 value = eval(tokens{3});
                 
                 % Add compartment
-                m = AddCompartment(m, name, dim, value);
+                m.AddCompartment(name, dim, value);
             elseif mode == 2
                 % Inputs
                 tokens = vec(regexp(line, ',|".*"|[^\s,]*','match'));
@@ -173,7 +173,7 @@ for iFile = 1:nFiles
                 end
                 
                 % Add Input
-                m = AddInput(m, name, compartment, value);
+                m.AddInput(name, compartment, value);
             elseif mode == 3
                 % Seeds
                 tokens = vec(regexp(line, ',|".*"|[^\s,]*','match'));
@@ -191,7 +191,7 @@ for iFile = 1:nFiles
                 value = eval(tokens{2});
                 
                 % Add seed
-                m = AddSeed(m, name, value);
+                m.AddSeed(name, value);
             elseif mode == 4
                 % States
                 tokens = vec(regexp(line, '".*"|[^\s,]*','match'));
@@ -233,7 +233,7 @@ for iFile = 1:nFiles
                 end
                 
                 % Add State
-                m = AddState(m, name, compartment, seeds);
+                m.AddState(name, compartment, seeds);
             elseif mode == 5
                 % Outputs
                 tokens = vec(regexp(line, ',|".*"|[^\s,]*','match'));
@@ -269,7 +269,7 @@ for iFile = 1:nFiles
                 end
                 
                 % Add output
-                m = AddOutput(m, name, expressions);
+                m.AddOutput(name, expressions);
             elseif mode == 6
                 % Parameters
                 tokens = vec(regexp(line, ',|".*"|[^\s,]*','match'));
@@ -288,7 +288,7 @@ for iFile = 1:nFiles
                 value = eval(tokens{2});
                 
                 % Add parameter
-                m = AddParameter(m, name, value);
+                m.AddParameter(name, value);
             elseif mode == 7
                 % Reactions
                 tokens = vec(regexp(line, ',|".*"|[^\s,]*','match'));
@@ -328,7 +328,7 @@ for iFile = 1:nFiles
                     products = products(~strcmp(products, '0'));
                     
                     % This is a normal line
-                    m = AddReaction(m, tokens(7:end), reactants, products, parameters(1,:), parameters(2,:));
+                    m.AddReaction(tokens(7:end), reactants, products, parameters(1,:), parameters(2,:));
                 else
                     % Split between the equal sign
                     parameter = regexp(tokens{end}, '=', 'split');
@@ -348,7 +348,7 @@ for iFile = 1:nFiles
                     products = products(~strcmp(products, '0'));
 
                     % This is the special syntax for a multi-product line
-                    m = AddReaction(m, [], reactants, products, parameter);
+                    m.AddReaction([], reactants, products, parameter);
                 end
             else
                 error('KroneckerBio:LoadModelMassAction:SectionNotSpecified', 'Line %i in %s occurs before any section header: %s', lineNumber, files{iFile}, line)
@@ -361,4 +361,4 @@ for iFile = 1:nFiles
 end
 
 %% Finalize Model
-m = FinalizeModel(m);
+m.Finalize;

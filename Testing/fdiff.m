@@ -1,5 +1,6 @@
 function [ratio, dfdx_finite, dfdx_analytic] = fdiff(x0, f, dfdx)
-% Compare an analytical derivative with a finite difference derivative
+% Compare an analytical derivative with a finite difference (actually
+%   complex step) derivative
 diff = 1e-8;
 
 f0 = vec(f(x0));

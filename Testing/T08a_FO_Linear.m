@@ -9,7 +9,7 @@ clear; close all; clc
 rng('default');
 
 % Whether to generate new data for load model and simulated data
-simNew = false;
+simNew = true;
 
 if simNew
     %% Build model

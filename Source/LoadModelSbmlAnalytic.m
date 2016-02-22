@@ -8,13 +8,17 @@ function m = LoadModelSbmlAnalytic(filename, opts)
 %   filename: [ string ]
 %       Path to SBML file. Usually has .sbml or .xml extension
 %   opts: [ options struct scalar {} ]
-%       .Verbose [ logical scalar {false} ]
-%       	Print progress to command window
-%       .Validate [ logical scalar {false} ]
+%       .Verbose [ scalar nonnegative integer ]
+%       	Print progress to command window, with greater values meaning more
+%       	verbose output
+%       .Validate [ true | {false} ]
 %           Whether to use libSBML's model validation tool
-%       .UseNames [logical scalar {false} ]
+%       .UseNames [ true | {false} ]
 %           Whether to convert SBML IDs to Names and autogenerate new IDs
 %           Use this when the supplied SBML model uses "nice" names as IDs
+%       .ICsAsSeeds [ {true} | false ]
+%           Whether to make all state initial conditions seeds or hardcode
+%           initial conditions.
 %
 %   Outputs
 %   m: [ Model.Analytic struct ]
@@ -37,6 +41,7 @@ end
 opts_.Verbose = 0;
 opts_.Validate = false;
 opts_.UseNames = false;
+opts_.ICsAsSeeds = true;
 
 opts = mergestruct(opts_, opts);
 
@@ -50,13 +55,6 @@ sbml = TranslateSBML(filename, double(opts.Validate), opts.Verbose);
 
 if verbose; fprintf('done.\n'); end
 
-m = sbml2analytic(sbml);
-
-%% Convert model
-% symbolic = sbml2symbolic(sbml, opts);
-% 
-% assert(isValidSymbolicModel(symbolic), 'LoadModelSbmlAnalytic:InvalidSymbolicModel', 'Symbolic model intermediate failed validation check')
-%     
-% m = symbolic2analytic(symbolic, opts);
+m = sbml2analytic(sbml, opts);
 
 end

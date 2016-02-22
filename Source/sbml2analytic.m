@@ -1,4 +1,14 @@
-function m = sbml2analytic(sbml)
+function m = sbml2analytic(sbml, opts)
+
+if nargin < 2
+    opts = [];
+end
+
+% Default options
+opts_ = [];
+opts_.ICsAsSeeds = true;
+
+opts = mergestruct(opts_, opts);
 
 m = InitializeModelAnalytic(sbml.name);
 
@@ -117,7 +127,7 @@ r_products = [r_products; cellfun(@(id){{id,1}}, z_ids(z_is_rate))];
 r_rates = [r_rates; z_values(z_is_rate)];
 z_handled(z_is_rate) = true;
 
-% Assume that all rules left are assignment rules
+% Assume that all rules left are repeated assignment rules
 
 % Compartment assignments get copied into compartment size
 [z_is_compartment, v_getting_replaced] = ismember(z_ids, v_ids);
@@ -184,7 +194,13 @@ for ixu = 1:nxu
     if xu_is_inputs(ixu)
         m = AddInput(m, xu_names{ixu}, vxu_names{ixu}, xu_values{ixu});
     else
-        m = AddState(m, xu_names{ixu}, vxu_names{ixu}, xu_values{ixu});
+        if opts.ICsAsSeeds
+            seed_name_ixu = [vxu_names{ixu}, '_', xu_names{ixu}, '_0'];
+            m = AddState(m, xu_names{ixu}, vxu_names{ixu}, seed_name_ixu);
+            m = AddSeed(m, seed_name_ixu, xu_values{ixu});
+        else
+            m = AddState(m, xu_names{ixu}, vxu_names{ixu}, xu_values{ixu});
+        end
     end
 end
 

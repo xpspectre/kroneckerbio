@@ -16,7 +16,7 @@ function m = LoadModelSbmlAnalytic(filename, opts)
 %       .UseNames [ true | {false} ]
 %           Whether to convert SBML IDs to Names and autogenerate new IDs
 %           Use this when the supplied SBML model uses "nice" names as IDs
-%       .ICsAsSeeds [ {true} | false ]
+%       .ICsAsSeeds [ true | {false} ]
 %           Whether to make all state initial conditions seeds or hardcode
 %           initial conditions.
 %
@@ -41,7 +41,7 @@ end
 opts_.Verbose = 0;
 opts_.Validate = false;
 opts_.UseNames = false;
-opts_.ICsAsSeeds = true;
+opts_.ICsAsSeeds = false;
 
 opts = mergestruct(opts_, opts);
 

@@ -18,14 +18,28 @@ end
 
 %% More comprehensive advanced model loading
 function testBasicSBMLLoading(a)
-opts = [];
-opts.UseNames = true;
-m = LoadModelSbmlAnalytic('test.xml', opts);
+m = LoadModelSbmlAnalytic('test.xml');
 m = FinalizeModel(m);
 
 a.verifyEqual(m.nv, 1);
 a.verifyEqual(m.nk, 3);
 a.verifyEqual(m.ns, 0);
+a.verifyEqual(m.nu, 3);
+a.verifyEqual(m.nx, 1);
+a.verifyEqual(m.nr, 3);
+a.verifyEqual(m.nz, 0);
+verifyDerivatives(a, m);
+end
+
+function testBasicSBMLLoadingAsSeeds(a)
+opts = [];
+opts.ICsAsSeeds = true;
+m = LoadModelSbmlAnalytic('test.xml', opts);
+m = FinalizeModel(m);
+
+a.verifyEqual(m.nv, 1);
+a.verifyEqual(m.nk, 3);
+a.verifyEqual(m.ns, 1);
 a.verifyEqual(m.nu, 3);
 a.verifyEqual(m.nx, 1);
 a.verifyEqual(m.nr, 3);

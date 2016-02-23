@@ -223,6 +223,7 @@ classdef FitObject < handle
        function addCondition(this, condition, opts)
            % Add experimental condition to fit object. Model condition is based
            % on must already be present, or it throws an error.
+           %
            % Inputs:
            %    condition [ condition struct ]
            %    opts [ options struct ]
@@ -280,10 +281,12 @@ classdef FitObject < handle
            %            of integration separately, with spec for different
            %            terms in regular integration, forward, and adjoint
            %            sensitivity calculations.
-           %        .ParamSpec [ n x 5 table with cols {Name, Type, LB, UB, Use} ]
-           %            Table specifying all parameter bounds and fit specs.
-           %            Alternative way of specifying fit spec by name in a nice
-           %            way.
+           %        .ParamSpec [ [Name] x [Type,LB,UB,Use] table {empty} ]
+           %            Table specifying all parameter bounds and fit specs. The
+           %            parameter name is the row and Type, LB, UB, and Use are
+           %            columns. Alternative way of specifying fit spec by name
+           %            in a nice way.
+           %
            % Side Effects:
            %    Adds condition to fit object; updates component map. Annotates
            %    condition struct with:
@@ -369,10 +372,11 @@ classdef FitObject < handle
                % Get param name lists to get indices from
                ps = opts.ParamSpec;
                np = height(ps);
+               names = ps.Properties.RowNames;
                for i = 1:np
                    p = ps(i,:);
                    
-                   name = p.Name{1};
+                   name = names{i};
                    type = p.Type{1};
                    lb   = p.LB;
                    ub   = p.UB;
@@ -574,6 +578,8 @@ classdef FitObject < handle
            %            Specifying rate parameters to vary from other conditions
            %            that use the same model type generates a dummy model
            %            with the varying rates.
+           %        .ParamSpec
+           %
            % Side Effects:
            %    Adds a dummy model if params are allowed to vary between
            %    conditions.
@@ -587,31 +593,6 @@ classdef FitObject < handle
            
            if isempty(condition)
                condition = this.Conditions(1);
-           end
-           
-           % Extract UseParams from ParamSpec, if present
-           if isfield(opts, 'ParamSpec')
-               
-               parentModelMask = ismember(this.modelNames, condition.ParentModelName);
-               if ~parentModelMask
-                   error('FitObject:addCondition: Condition parent model %s not present in fit object.', condition.ParentModelName)
-               end
-               kNames = {this.Models(parentModelMask).Parameters.Name}';
-               opts.UseParams = ones(length(kNames), 1); % default fit all params
-               
-               ps = opts.ParamSpec;
-               np = height(ps);
-               for i = 1:np
-                   p = ps(i,:);
-                   
-                   name = p.Name{1};
-                   type = p.Type{1};
-                   use  = p.Use;
-                   
-                   if strcmp(type, 'k')
-                       opts.UseParams(ismember(kNames, name)) = use;
-                   end
-               end
            end
            
            % Check if specified fit params match an existing model/condition; if

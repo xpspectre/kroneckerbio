@@ -60,7 +60,6 @@ omf = matlabFunction(om, 'Vars', {th});
 omI = inv(om);
 omIf = matlabFunction(omI, 'Vars', {th});
 
-
 %% Derivative
 dom_dth = sym(zeros(neta,neta,ntheta));
 for i = 1:neta
@@ -83,6 +82,8 @@ for i = 1:neta
 end
 domI_dthf = matlabFunction(domI_dth, 'Vars', {th});
 
+%% Clear symbolic variables
+clear om omI dom_dth domI_dth omega_ij der_ij
 
 %% Assign final function handles
 fOmega = [];

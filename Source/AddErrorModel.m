@@ -67,13 +67,13 @@ switch nargin
 end
 
 names = vec(names);
-nOutputs = length(names);
+nNames = length(names);
 
 % Set default constant error model if not specified
 if isempty(errormodel) % implies errornames is also empty, but can still have initial guesses assuming default constant error model
-    errormodel = cell(nOutputs);
-    errornames = cell(nOutputs,1);
-    for i = 1:nOutputs
+    errormodel = cell(nNames);
+    errornames = cell(nNames,1);
+    for i = 1:nNames
         errorname = ['sigma__' names{i}];
         errornames{i} = errorname;
         
@@ -87,13 +87,14 @@ end
 nSigma = length(errornames);
 
 % Verify errormodel is the right shape
-assert(all(size(errormodel) == [nOutputs,nOutputs]), 'AddErrorModel:InvalidErrorModelShape', 'errormodel must be a nName x nName cell matrix. Specified error model was %g x %g', size(errormodel,1), size(errormodel,2))
+assert(all(size(errormodel) == [nNames,nNames]), 'AddErrorModel:InvalidErrorModelShape', 'errormodel must be a nName x nName cell matrix. Specified error model was %g x %g', size(errormodel,1), size(errormodel,2))
 
 % TODO: verify errormodel is lower triangular
 
 % Verify that error models refer to outputs that exist in model
 y_names = vec({m.Outputs.Name});
 y_names = y_names(~cellfun('isempty', y_names));
+ny = numel(y_names);
 foundNameMask = ismember(names, y_names);
 assert(all(foundNameMask), 'AddErrorModel:InvalidName', 'Names: %s not found in model', cellstr2str(names(~foundNameMask)))
 
@@ -122,14 +123,16 @@ assert(numel(errornames) == numel(errorvalues), 'AddErrorModel:WrongNumberOfErro
 y_exprs = vec({m.Outputs.Expression});
 y_exprs = y_exprs(~cellfun('isempty', y_exprs));
 
-for i = 1:nOutputs
+namesPos = find(ismember(y_names, names));
+
+for i = 1:nNames
     for j = 1:i
         em = errormodel{i,j};
         if ~isempty(em)
-            for k = 1:nOutputs
+            for k = 1:ny
                 em = replaceSymbolRegex(em, y_names{k}, ['(' y_exprs{k} ')']);
             end
-            m = AddOutput(m, ['Ri__' y_names{i} '__' y_names{j}], em);
+            m = AddOutput(m, ['Ri__' y_names{namesPos(i)} '__' y_names{namesPos(j)}], em);
         end
     end
 end

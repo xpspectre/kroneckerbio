@@ -83,13 +83,19 @@ end
 domI_dthf = matlabFunction(domI_dth, 'Vars', {th});
 
 %% Clear symbolic variables
-clear om omI dom_dth domI_dth omega_ij der_ij
+clear th om omI dom_dth domI_dth omega_ij der_ij
 
 %% Assign final function handles
+% eval-char-matlabFunction is slow, ugly, and fragile, but it gets the job done
+%   while removing dependence on the symbolic toolbox at runtime
 fOmega = [];
-fOmega.Omega          = omf;
-fOmega.OmegaI         = omIf;
-fOmega.dOmega_dtheta  = dom_dthf;
-fOmega.dOmegaI_dtheta = domI_dthf;
+fOmega.Omega          = eval(char(omf));
+fOmega.OmegaI         = eval(char(omIf));
+fOmega.dOmega_dtheta  = eval(char(dom_dthf));
+fOmega.dOmegaI_dtheta = eval(char(domI_dthf));
+% fOmega.Omega          = omf;
+% fOmega.OmegaI         = omIf;
+% fOmega.dOmega_dtheta  = dom_dthf;
+% fOmega.dOmegaI_dtheta = domI_dthf;
 
 end

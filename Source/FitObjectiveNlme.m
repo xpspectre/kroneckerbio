@@ -155,9 +155,10 @@ end
 fit.addOptions(opts);
 
 %% Construct starting variable parameter set of thetas
-[thetas, etas] = getParameterMask({fit.Models(1).Parameters.Name});
-T0 = fit.collectParams;
+[T0, details] = fit.collectParams;
 nT = length(T0);
+
+[thetas, etas] = getParameterMask(details{:,'Name'});
 Theta0 = T0(thetas);
 nTheta = length(Theta0);
 

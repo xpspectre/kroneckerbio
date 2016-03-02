@@ -93,10 +93,12 @@ classdef (Abstract) ParamMapper < handle
             end
         end
         
-        function T = Tlocal2T(this, Tlocal, mode)
+        function [T, details] = Tlocal2T(this, Tlocal, mode)
             % Map local T's in conditions to overall T vector. Includes optional
-            % argument to specify overwriting values in T (multiple conditions
-            % sharing a value) or summing (multiple conditions sum gradients)
+            %   argument to specify overwriting values in T (multiple conditions
+            %   sharing a value) or summing (multiple conditions sum gradients).
+            %   Returns details on collected parameters as second output arg
+            % 
             % Inputs:
             %    Tlocal [ nCon x 1 cell vector of 4 x 1 cell vectors of nXi x 1
             %           double vectors | nCon x 1 cell vector of 4 x 4 cell matrices of nXi
@@ -110,6 +112,12 @@ classdef (Abstract) ParamMapper < handle
             % Outputs:
             %    T [ nT x 1 double vector | nT x nT double matrix ]
             %       Overall vector of parameters/gradient or Hessian for fit
+            %    details [ nT x 3 double matrix ]
+            %       Matrix where each row indicates a param in the overall T
+            %       vector, the 1st col is the index of the type of param (1-4
+            %       denoting k,s,q,h), the 2nd col indicating the position
+            %       in the param type, and the 3rd col indicating the index of
+            %       the first experiment it came from
             if nargin < 3
                 mode = 'overwrite';
             end
@@ -126,13 +134,14 @@ classdef (Abstract) ParamMapper < handle
                 % TODO: make this error check more thorough
             end
             
-%             nCon = size(this.paramsMap, 1);
             nCon = size(Tlocal,1); % Only process the gradients/Hessians passed to it
             if order == 1
                 T = zeros(this.nT,1);
             else
                 T = zeros(this.nT,this.nT);
             end
+            
+            details = zeros(this.nT,3);
             
             % Iterate through conditions
             for iCon = 1:nCon
@@ -181,6 +190,14 @@ classdef (Abstract) ParamMapper < handle
                                         T(Tidx_i,Tidx_j) = Tlocal_iCon_ij(iX,jX);
                                     elseif strcmpi(mode, 'sum')
                                         T(Tidx_i,Tidx_j) = T(Tidx_i,Tidx_j) + Tlocal_iCon_ij(iX,jX);
+                                    end
+                                    
+                                    % Populate details matrix, only filling it
+                                    %   in the first time it's encountered
+                                    if details(Tidx_i,1) == 0
+                                        details(Tidx_i,1) = Xsi; % index 1-4 indicating k,s,q,h
+                                        details(Tidx_i,2) = iX; % index 1-{nk,ns,nq,nh} indicating position in respective type
+                                        details(Tidx_i,3) = iCon; % index of model/condition
                                     end
                                 end
                             end

@@ -43,4 +43,10 @@ a.assertEqual(size(fit.Conditions), [1,1])
 a.assertEqual(size(fit.Objectives), [1,1])
 a.assertMatches(fit.Conditions.Name, a.TestData.experiment.Name);
 a.assertMatches(fit.Objectives.Name, a.TestData.objfun.Name);
+
+% Test parameter collecting
+[T, details] = fit.collectParams;
+a.assertEqual(numel(T), 2);
+a.assertEqual(numel(T), height(details));
+a.assertTrue(isequal(details{:,1}, {'kf';'kr'}));
 end

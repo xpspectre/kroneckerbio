@@ -35,6 +35,10 @@ function [objfunval, objfungrad] = calcFocei(int, outputs, measurements, order, 
 %       Omega and Sigma are included in Theta
 %       Omega is pulled out separately for convenience for a couple terms
 %   All terms with star are evaluated at optimal eta star (same as eta in FO method)
+%   int.dxdT and int.dx2dT2 are based on T, the vector of params this condition
+%       is fitting (and not all of them). For an individual, use UseParams and
+%       UseSeeds (TODO: implement UseInputControls and UseDoseControls also) to
+%       do indexing correctly
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Get common components
@@ -52,6 +56,11 @@ nRi = length(RiInds);
 [thetaInds, etaInds] = getParameterInds(int.k_names);
 ntheta = length(thetaInds);
 neta = length(etaInds);
+
+% Indices that take into account the subset of fit params when using T
+[thetaIndsT, etaIndsT] = getParameterInds(int.k_names(int.UseParams));
+nthetaT = length(thetaIndsT);
+netaT = length(etaIndsT);
 
 etai = int.k(etaInds);
 
@@ -151,8 +160,8 @@ if order >= 1
         % In Eq 19,20
         dxij_detaik = zeros(nx,neta);
         for ix = 1:nx
-            for k = 1:neta
-                ind = nx*(etaInds(k)-1) + ix;
+            for k = 1:netaT
+                ind = nx*(etaIndsT(k)-1) + ix; %%FIT_T_ONLY%% what are the etaInds in _dt
                 dxij_detaik(ix,k) = int.dxdT(ind,j);
             end
         end
@@ -355,8 +364,8 @@ if order >= 2
             % In Eq 34
             dxij_dtheta = zeros(nx,ntheta);
             for ix = 1:nx
-                for m = 1:ntheta
-                    ind = nx*(thetaInds(m)-1) + ix;
+                for m = 1:nthetaT
+                    ind = nx*(thetaIndsT(m)-1) + ix;
                     dxij_dtheta(ix,m) = int.dxdT(ind,j);
                 end
             end
@@ -548,9 +557,9 @@ if order >= 2
             % x changes fastest, then thetam; etaik changes slowest
             d2xij_detaikdthetam = zeros(nx,neta,ntheta);
             for ix = 1:nx
-                for k = 1:neta
-                    for m = 1:ntheta
-                        ind = nx*nT*(etaInds(k)-1) + nx*(thetaInds(m)-1) + ix;
+                for k = 1:netaT
+                    for m = 1:nthetaT
+                        ind = nx*nT*(etaIndsT(k)-1) + nx*(thetaIndsT(m)-1) + ix;
                         d2xij_detaikdthetam(ix,k,m) = int.d2xdT2(ind,j); % 2 x 13 x 13 x time; 1st 3 dims compressed into row indices
                     end
                 end
@@ -561,9 +570,9 @@ if order >= 2
             % x changes fastest, then etail; etaik changes slowest
             d2xij_detaikdetail = zeros(nx,neta,neta);
             for ix = 1:nx
-                for k = 1:neta
-                    for l = 1:neta
-                        ind = nx*nT*(etaInds(k)-1) + nx*(etaInds(l)-1) + ix;
+                for k = 1:netaT
+                    for l = 1:netaT
+                        ind = nx*nT*(etaIndsT(k)-1) + nx*(etaIndsT(l)-1) + ix;
                         d2xij_detaikdetail(ix,k,l) = int.d2xdT2(ind,j); % 2 x 13 x 13 x time; 1st 3 dims compressed into row indices
                     end
                 end

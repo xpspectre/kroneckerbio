@@ -788,11 +788,16 @@ classdef FitObject < handle
            end
        end
        
-       function T = collectParams(this)
-           % Collect all params from fit object into master T
+       function [T, details] = collectParams(this)
+           % Collect all params from fit object into master T. Returns details
+           %    on collected parameters as second output arg
+           %
            % Outputs:
            %    T [ nT x 1 double vector ]
            %        Vector of main parameters optimized by fmincon.
+           %    details [ nT x [Name,Type,Ind] Table ]
+           %        Table of parameter name, type {'k','s','q','h'} and the
+           %        model (for k) or experiment (for s,q,h) it came from
            
            % Put params in same format as param mapper
            Tlocals = cell(this.nConditions,1);
@@ -804,7 +809,36 @@ classdef FitObject < handle
                    this.Conditions(i).h};
                Tlocals{i} = Tlocal;
            end
-           T = this.paramMapper.Tlocal2T(Tlocals);
+           [T, details_] = this.paramMapper.Tlocal2T(Tlocals);
+           
+           % Process details_ into nicer details
+           if nargout == 2
+               paramTypes = {'k','s','q','h'};
+               nT = numel(T);
+               
+               Name = cell(nT,1);
+               Type = cell(nT,1);
+               Ind = cell(nT,1);
+               
+               for i = 1:nT
+                   Ind{i} = details_(i,3);
+                   Type{i} = paramTypes{details_(i,1)};
+                   switch Type{i}
+                       case 'k'
+                           kNames = {this.Models(Ind{i}).Parameters.Name};
+                           Name{i} = kNames{details_(i,2)};
+                       case 's'
+                           parentModelIdx = this.Conditions(Ind{i}).ParentModelIdx;
+                           sNames = {this.Models(parentModelIdx).Seeds.Name};
+                           Name{i} = sNames{details_(i,2)};
+                       otherwise
+                           error('q and h and other param types not implemented yet')
+                   end
+               end
+               
+               details = table(Name,Type,Ind);
+           end
+           
        end
        
        function updateParams(this, T)

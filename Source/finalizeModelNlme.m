@@ -13,8 +13,9 @@ assert(isfield(m, 'OmegaNames'), 'kroneckerbio:finalizeModelNlme:MissingOmegaNam
 kNames = vec({m.Parameters.Name});
 fOmega = calcOmega(m.OmegaNames, kNames);
 
+% Augment finalized model with Nlme-specific fields
+m.fOmega = fOmega;
+
 % General Model.Analytic finalization
 m = finalizeModelAnalytic(m, varargin{:});
 
-% Augment finalized model with Nlme-specific fields
-m.fOmega = fOmega;

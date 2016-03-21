@@ -18,6 +18,16 @@ measurements = [0.6  0.4  1.5  1.3  0.4  0.6]';
 sd = sdLinear(0.05, 0.1); % Simple error model with a constant and proportional term
 obs = observationLinearWeightedSumOfSquares(outputList, timesList, sd, 'DefaultObservation');
 a.TestData.objfun = obs.Objective(measurements);
+
+a.TestData.experiment2 = experimentInitialValue(m, [], [], [], 'InitialValueExperiment2');
+
+outputList   = [1    1    2    2    3    3  ]';
+timesList    = [0.1  1    0.1  1    0.1  1  ]';
+measurements = [0.7  0.5  1.6  1.4  0.5  0.7]';
+sd = sdLinear(0.05, 0.1);
+obs = observationLinearWeightedSumOfSquares(outputList, timesList, sd, 'DefaultObservation2');
+a.TestData.objfun2 = obs.Objective(measurements);
+
 end
 
 function teardownOnce(a)
@@ -49,4 +59,30 @@ a.assertMatches(fit.Objectives.Name, a.TestData.objfun.Name);
 a.assertEqual(numel(T), 2);
 a.assertEqual(numel(T), height(details));
 a.assertTrue(isequal(details{:,1}, {'kf';'kr'}));
+end
+
+function testParamSpec(a)
+% Test easier-to-use API that lets you specify parameters to fit, their bounds,
+% and how they should be shared between individuals
+fit = FitObject('TestFit');
+fit.addModel(a.TestData.model);
+
+% Test that 1st fit condition data works
+Name   = {'kf', 'kr'}';
+Type   = {'k',  'k'}';
+LB = 10.^[-2,   -2]';
+UB = 10.^[ 6,    6]';
+Use    = [ 1,    0]';
+opts = [];
+opts.ParamSpec = table(Type, LB, UB, Use, 'RowNames', Name); % variable names are necessary - they get turned into column names
+fit.addFitConditionData(a.TestData.objfun, a.TestData.experiment, opts);
+a.assertEqual(fit.componentMap, [1,1,1]);
+
+% Test that additional fit condition data that needs to create a dummy model works
+Use    = [ 2,    0]';
+opts = [];
+opts.ParamSpec = table(Type, LB, UB, Use, 'RowNames', Name);
+fit.addFitConditionData(a.TestData.objfun2, a.TestData.experiment2, opts);
+a.assertEqual(fit.componentMap, [1,1,1;2,2,2]);
+
 end

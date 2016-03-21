@@ -30,7 +30,7 @@ function m = finalizeModelAnalytic(m, opts)
 %           If .UseMEX is set to TRUE, the string provided here sets the
 %           directory to which the .mex files will be written. If .UseMEX
 %           is FALSE, this option is ignored.
-%       .EvaluateExternalFunctions [ logical scalar {false} ]
+%       .EvaluateExternalFunctions [ {true} | false ]
 %           Determines whether to evaluate calls to external functions in
 %           the reaction rate expressions. The external functions are
 %           evaluated with symbolic input arguments to obtain a symbolic

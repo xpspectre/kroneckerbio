@@ -398,7 +398,7 @@ classdef FitObject < handle
                        case 'h'
                            error('Not implemented yet, or hNames not specified anywhere')
                        otherwise
-                           warning('FitObject:addCondition:invalidParamType', 'Param type %s in opts.ParamSpec not recognized. Skipping.', type)
+                           warning('FitObject:processParamSpec:InvalidParamType', 'Param type %s in opts.ParamSpec not recognized. Skipping.', type)
                    end
                end
            end
@@ -448,13 +448,14 @@ classdef FitObject < handle
                hStart(hUse) = validateBounds(opts.StartingDoseControls(hUse), bounds{1,4}(hUse), bounds{2,4}(hUse));
            end
            
+           modelName = this.Models(parentModelIdx).Name;
            if ~isempty(opts.StartingParams) && any(kUse)
-               modelName = this.Models(parentModelIdx).Name;
                this.Models(parentModelIdx) = mergestruct(this.Models(parentModelIdx), this.Models(parentModelIdx).Update(kStart));
                this.Models(parentModelIdx).Name = modelName; % hack needed because externally modified fields are lost on model Update
            end
            if (~isempty(opts.StartingSeeds) && any(sUse)) || (~isempty(opts.UseInputControls) && any(qUse)) || (~isempty(opts.StartingDoseControls) && any(hUse))
                condition = mergestruct(condition, condition.Update(sStart, qStart, hStart));
+               condition.ParentModelName = modelName;
            end
            
            % Add tolerances
@@ -471,6 +472,7 @@ classdef FitObject < handle
        
        function addObjective(this, objective, parentConditions, opts)
            % Add dataset/objective function to fit object.
+           %
            % Inputs:
            %    objective [ objective struct ]
            %    parentConditions [ string | cell array of strings {1st condition} ]
@@ -481,6 +483,7 @@ classdef FitObject < handle
            %            Relative weight of this objective function when multiple
            %            are summed together in fit object. Simply acts as a
            %            multiplier (i.e., no normalization is needed or added)
+           %
            % Side Effects:
            %    Adds objective to fit object; updates component maps to be
            %    consistent
@@ -527,6 +530,7 @@ classdef FitObject < handle
                % Sanity check: make sure output indices in objective map to actual
                % outputs in model (referenced thru condition)
                parentConditionIdx = ismember(this.conditionNames, parentConditionName);
+               assert(sum(parentConditionIdx) < 2, 'FitObject:addObjective:ConditionNameCollision', 'Multiple conditions have the same name. Make sure conditions have unique names. But we should change this so they''re automatically renamed.')
                parentModelIdx = ismember(this.modelNames, this.Conditions(parentConditionIdx).ParentModelName);
                parentModelName = this.Models(parentModelIdx).Name;
                outputNames = {this.Models(parentModelIdx).Outputs.Name};
@@ -564,6 +568,7 @@ classdef FitObject < handle
        function addFitConditionData(this, objective, condition, opts)
            % Higher level/convenience function that adds a "participant" to fit. Abstracts
            % away some of the built in structure that kroneckerbio uses.
+           %
            % Inputs:
            %    objective [ objective struct ]
            %        Dataset/objective function of participant
@@ -595,6 +600,32 @@ classdef FitObject < handle
                condition = this.Conditions(1);
            end
            
+           % Check existing models for existence of valid parent model
+           parentModelName = condition.ParentModelName;
+           assert(any(ismember(this.modelNames, parentModelName)), 'FitObject:addFitConditionData: Parent model %s does not exist.', parentModelName)
+           
+           % Get UseParams from ParamSpec to determine if new model is needed
+           if isfield(opts, 'ParamSpec')
+               kNames = {this.Models(ismember(this.modelNames, parentModelName)).Parameters.Name};
+               opts.UseParams = zeros(length(kNames),1);
+               % Get param name lists to get indices from
+               ps = opts.ParamSpec;
+               np = height(ps);
+               names = ps.Properties.RowNames;
+               for i = 1:np
+                   p = ps(i,:);
+                   
+                   name = names{i};
+                   type = p.Type{1};
+                   use  = p.Use;
+                   
+                   if strcmp(type, 'k')
+                       opts.UseParams(ismember(kNames, name)) = use;
+                   end
+                   
+               end
+           end
+           
            % Check if specified fit params match an existing model/condition; if
            % condition specifies different fit params for an existing model,
            % make a dummy model. Needed because models specify k inside them
@@ -602,10 +633,6 @@ classdef FitObject < handle
                
                opts.UseParams = vec(opts.UseParams);
                
-               % Check existing models for existence of valid parent model
-               parentModelName = condition.ParentModelName;
-               
-               assert(any(ismember(this.modelNames, parentModelName)), 'FitObject:addFitConditionData: Parent model %s does not exist.', parentModelName)
                assert(this.Models(ismember(this.modelNames, parentModelName)).nk == length(opts.UseParams), 'FitObject:addFitConditionData: Number of UseParams doesn''t match number of model rate params')
                
                % parentModelIdx = 0 for no valid model; positive integer for valid model to attach to
@@ -628,7 +655,7 @@ classdef FitObject < handle
                end
                
                % Attach condition to model
-               condition.ParentModelName = this.modelNames{parentModelIdx};
+               condition.ParentModelName = this.modelNames{parentModelIdx}; % but this isn't permanent
            end
            
            % Add components to fit

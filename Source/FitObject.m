@@ -815,6 +815,57 @@ classdef FitObject < handle
            end
        end
        
+       function [F, All] = computeInformation(this, dxdTSol)
+           % Compute Fisher information matrix of this FitObject.
+           % Optionally accepts sensitivities in case you don't wan't to
+           % recalculate them and optionally returns individual FIMs for
+           % each condition.
+           %
+           % Inputs:
+           %    dxdTSol [ nCon x 1 cell array of sensitivity solution structs {} ]
+           %        Optional sensitivity solution struct(s) from
+           %        integrateAllSens if you don't want to recalculate them
+           %        in this function. The number and ordering of structs
+           %        must match those in this FitObject
+           %
+           % Outputs:
+           %   F [ double matrix ]
+           %       Combined fisher information matrix. The FIM is the sum of all
+           %       fisher information matrices assuming there is no
+           %       covariance between errors in seperate experiments.
+           %   All [ nCon x 1 cell array of double matrices ]
+           %       The individual FIMs for each experiment
+           
+           if nargin < 2
+               dxdTSol = [];
+           end
+           
+           nCon = this.nConditions;
+           if isempty(dxdTSol)
+               dxdTSol = cell(nCon,1);
+           end
+           
+           Fs = cell(nCon,1);
+           for i = 1:nCon
+               modelIdx = this.Conditions(i).ParentModelIdx;
+               objectives = this.Objectives(this.componentMap(:,2) == i)';
+               
+               Fi = computeObjInfo(this.Models(modelIdx), this.Conditions(i), objectives, this.options, dxdTSol{i});
+               
+               Fs(i) = Fi;
+           end
+           F = this.paramMapper.Tlocal2T(Fs, 'sum');
+           
+           % Return all individual condition FIMs
+           if nargout == 2
+               All = cell(nCon,1);
+               for i = 1:nCon
+                   All{i} = this.paramMapper.Tlocal2T(Fs(i), 'sum');
+               end
+           end
+           
+       end
+       
        function [T, details] = collectParams(this)
            % Collect all params from fit object into master T. Returns details
            %    on collected parameters as second output arg

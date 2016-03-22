@@ -76,12 +76,14 @@ end
 nCon = fit.nConditions;
 
 % Clean up dxdTSol
-if ~isempty(dxdTSol)
+if exist('dxdTSol', 'var') && ~isempty(dxdTSol)
     if ~iscell(dxdTSol)
         dxdTSol = {dxdTSol};
     else
         assert(all(size(dxdTSol) == [nCon,1]), 'KroneckerBio:ObjectiveInformation:InvalidSensitivity', 'dxdTSol must match the supplied conditions.')
     end
+else
+    dxdTSol = {};
 end
 
 %% Run main calculation

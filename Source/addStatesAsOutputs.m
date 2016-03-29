@@ -1,4 +1,4 @@
-function m = addStatesAsOutputs(m, UseShortNames)
+function m = addStatesAsOutputs(m, include_compartment)
 %addStatesAsOutputs A quick and dirty helper script that adds one output
 %   for each state currently in the model. Note: this
 %   function is order-dependent, meaning it only matches species already in the
@@ -9,36 +9,49 @@ function m = addStatesAsOutputs(m, UseShortNames)
 % Inputs:
 %   m [ model ]
 %       The model whose existing states are added as outputs
-%   UseShortNames [ true | {false} ]
-%       Whether to use just the species names without compartment prefixes.
-%       Throws an error if multiple species have the same name (for multiple
-%       compartments)
+%   include_compartment [ {true} | false ]
+%       Whether to use prepend the compartment to the species names. If false,
+%       errors will be thrown on model finalization if multiple outputs refer to
+%       species with the same unqualified name.
 %
 % Outputs:
 %   m [ model ]
 %       Model with states added as outputs
 
 if nargin < 2
-    UseShortNames = false;
+    include_compartment = true;
 end
 
-assert(isscalar(UseShortNames) && islogical(UseShortNames), 'KroneckerBio:addStatesAsOutputs:InvalidUseShortNamesOption', 'useShortNames arg must be a scalar logical')
-
-% Note that using short names for the expressions should be safe if they're
-%   already validated to be unique in the model
-if UseShortNames
-    names = vec({m.States(1:m.nx).Name});
-    assert(numel(names) == numel(unique(names)), 'KroneckerBio:addStatesAsOutputs:NonUniqueSpecies', 'useShortNames was set to true but multiple species share the same name')
-else
-    names = vec(strcat({m.States(1:m.nx).Compartment}, '.', {m.States(1:m.nx).Name}));
-end
-
-for i = 1:numel(names)
-    if is(m, 'Model.MassActionAmount')
-        m = AddOutput(m, names{i});
-    elseif is(m, 'Model.Analytic')
-        m = AddOutput(m, names{i}, ['"' names{i} '"']); % quotes around expressions with potentially invalid names
-    else
-        error('KroneckerBio:AddState:m', 'm must be a model')
+if is(m, 'Model.MassActionAmount')
+    for i = 1:m.nx
+        if include_compartment
+            name = [m.States(i).Compartment '.' m.States(i).Name];
+        else
+            name = m.States(i).Name;
+        end
+        
+        m = AddOutput(m, name, name);
     end
+elseif is(m, 'Model.Analytic')
+    for i = 1:m.nx
+        if include_compartment
+            name = [m.States(i).Compartment '.' m.States(i).Name];
+            expression = [quoteIfInvalid(m.States(i).Compartment) '.' quoteIfInvalid(m.States(i).Name)];
+        else
+            name = m.States(i).Name;
+            expression = quoteIfInvalid(m.States(i).Name);
+        end
+        
+        m = AddOutput(m, name, expression);
+    end
+else
+    error('KroneckerBio:AddOutput:m', 'm must be a model')
+end
+
+end
+
+function name = quoteIfInvalid(name)
+if ~isValidIdentifier(name)
+    name = ['"' name '"'];
+end
 end

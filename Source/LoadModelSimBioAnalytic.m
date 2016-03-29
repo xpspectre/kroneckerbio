@@ -1,34 +1,43 @@
-function m = LoadModelSimBioAnalytic(simbio, opts)
-%LoadModelSimBioAnalytic Load analytic model from a Matlab SimBiology model
-%   Modify the model and add outputs after calling this.
+function m = LoadModelSimBioAnalytic(simbio)
+%LoadModelSimBioAnalytic Import Matlab Simbiology model and covert to
+%   Kronecker analytic model. The model may be further modified by the
+%   user.
 %
-%   m = LoadModelSbmlMassAction(SimbioModel, opts)
+%   m = LoadModelSimBioAnalytic(simbio)
 %
 %   Inputs
-%   simbio: [ simbio model object ]
-%       Matlab SimBiology Model object
-%   opts: [ options struct scalar {} ]
-%       .Verbose [ logical scalar {false} ]
-%       	Print progress to command window
+%   simbio: [ simbio model object | string ]
+%       Matlab SimBiology Model object or name of SBML file to import
+%
+%   Outputs
+%   m: [ Model.Analytic struct ]
+%       An analytic kroneckerbio model
+%
+%   Notes
+%   - All species are tracked in amount.
+%   - Species that are set to constant or boundaryCondition are
+%   converted to inputs
+%   - Initial assignment rules of species are copied to the initial
+%   condition expression.
+%   - Repeated assignment rules of compartments are copied to the
+%   compartment size.
+%   - Repeated assignment rules of parameters and species get converted
+%   into Kronecker rules.
+%   - Rate rules are converted to reactions with a single product.
+%
+%   Limitations
+%   - Not all Simbiology features are compatible with this converter. This
+%   function ignores events, algebraic rules, and all functions in the
+%   model.
+%   - Simbiology does not expose the dimension of a compartment. All
+%   compartments are given a dimension of 3. This does not affect the
+%   behavior of the model.
 
-%% Clean up inputs
-if nargin < 2
-    opts = [];
+% (c) 2015 Kevin Shi, David R Hagen & Bruce Tidor
+% This work is released under the MIT license.
+
+if ischar(simbio)
+    simbio = sbmlimport(simbio);
 end
 
-% Default options
-opts_.Verbose = 0;
-opts_.Validate = false;
-opts_.UseNames = false;
-
-opts = mergestruct(opts_, opts);
-
-%% Convert model
-
-symbolic = simbio2symbolic(simbio, opts);
-
-assert(isValidSymbolicModel(symbolic), 'LoadModelSbmlAnalytic:InvalidSymbolicModel', 'Symbolic model intermediate failed validation check')
-
-m = symbolic2analytic(symbolic, opts);
-
-end
+m = simbio2analytic(simbio);

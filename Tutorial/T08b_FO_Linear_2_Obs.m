@@ -1,3 +1,4 @@
+%% T08a NLME FO Simple Linear Model 2 Outputs Test
 % Test FO with simple linear model and 2 outputs
 %   Model: x1 -> x2 with rate k1
 %   The analytic/symbolic solution to this model is tracatable:

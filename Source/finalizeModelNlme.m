@@ -5,7 +5,7 @@ function m = finalizeModelNlme(m, varargin)
 % toolbox.
 
 % Sanity checks
-assert(isfield(m, 'OmegaNames'), 'kroneckerbio:finalizeModelNlme:MissingOmegaNamesField')
+assert(isfield(m, 'OmegaNames'), 'KroneckerBio:finalizeModelNlme:MissingOmegaNamesField', 'Omega names field missing.')
 
 % Specific Model.Nlme finalization
 % Symbolically calculate Omega, inverses, and derivative and turn into

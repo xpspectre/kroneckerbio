@@ -1,10 +1,13 @@
-% Simple model construction and fitting
-%   Demonstrates setup of fitting problem, performs fit, and displays result
-%   Calculates the linearized parameter uncertainty about the optimal (fit) point
-%   Demonstrates optional global optimization routines
+%% T05a Fitting Parameters Basic
+% Simple model construction and fitting.
+%   Demonstrates setup of fitting problem, performs fit, and displays
+%   result.
+%   Calculates the linearized parameter uncertainty about the optimal (fit)
+%   point.
 
 %% Load equilibrium experiment A + B <-> C
-m = equilibrium_model;
+current_path = fileparts(mfilename('fullpath'));
+m = LoadModelMassAction(fullfile(current_path, '../Testing/Equilibrium.txt'));
 
 %% Construct experiment
 con = experimentInitialValue(m, [], [], [], 'InitialValueExperiment');

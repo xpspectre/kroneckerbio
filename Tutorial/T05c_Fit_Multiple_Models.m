@@ -1,3 +1,4 @@
+%% T05c Fit Multiple Models
 % Test/tutorial script for multiple distinct model/topology fits
 
 %% Initialize fit object
@@ -9,6 +10,7 @@ opts.ModelsShareParams = true; % allows multiple model types and relationships b
 fit = FitObject('T09c_Fit_Multiple_Models', opts);
 
 %% Construct equilibrium experiment A + B <-> C with seeds
+addpath([fileparts(mfilename('fullpath')) '/../Testing']);
 m1 = equilibrium_model;
 fit.addModel(m1);
 

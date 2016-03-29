@@ -1,4 +1,30 @@
 function obs = observationLinearWeightedSumOfSquares(outputlist, timelist, sd, name)
+%observationLinearWeightedSumOfSquares Create an observation scheme for a
+%   list of points, whose uncertainty is a Gaussian distribution with a
+%   mean of the true value and standard deviation that is an arbitrary
+%   function of the true value.
+%
+%   obs = observationLinearWeightedSumOfSquares(outputlist, timelist, sd, 
+%                                               name)
+%
+%   Inputs
+%   outputlist: [ positive integer vector n ]
+%       The indexes of the outputs for each measurement.
+%   timelist: [ nonnegative vector n ]
+%       The times for each measurement
+%   sd: [ handle @(t,i,y) returns positive ]
+%       The standard deviation function that takes the time, the index, and
+%       the true value and returns the standard deviation of the
+%       measurement.
+%   name: [ string ]
+%       An arbitrary name for the observation scheme
+%
+%   Outputs
+%   obs: [ observation scheme structure ]
+
+% (c) 2015 David R Hagen
+% This work is released under the MIT license.
+
 % Clean up inputs
 if nargin < 4
     name = '';
@@ -28,6 +54,8 @@ obs.Outputs = unique(outputlist);
 
 obs.Simulation = @simulation;
 obs.Objective  = @objective;
+
+obs.F = @(sol)F(outputlist, timelist, discrete_times, sd, sol);
 
 obs = pastestruct(observationZero(), obs);
 
@@ -76,64 +104,17 @@ obj.d2Gdy2 = @d2Gdy2;
 
 obj.p = @p;
 obj.logp = @logp;
-obj.F = @F;
-obj.Fn = @Fn;
+obj.F = @(sol)F(outputlist, timelist, discrete_times, sd, sol);
 
 obj = pastestruct(objectiveZero(), obj);
 
-%% %%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%% Helper functions %%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    function [ybar, sigma] = evaluate_sol(int)
-        y_all = int.y;
-        
-        ybar = zeros(n,1);
-        sigma = zeros(n,1);
-        for i = 1:n
-            ind = discrete_times == timelist(i);
-            ybar(i) = y_all(outputlist(i),ind);
-            sigma(i) = sd(timelist(i), outputlist(i), ybar(i));
-        end
-    end
-
-    function [dydT, sigma] = evaluate_grad(int)
-        nT = int.nT;
-        nx = int.nx;
-        
-        x_all = int.x;
-        u_all = int.u;
-        y_all = int.y;
-        dxdT_all = int.dxdT;
-
-        % Get dydT for every point
-        dydT = zeros(n, nT);
-        sigma = zeros(n,1);
-        for i = 1:n
-            ind = find(discrete_times == timelist(i), 1);
-            t_i = timelist(i);
-            x_i = x_all(:,ind);
-            u_i = u_all(:,ind);
-            dxdT_i = reshape(dxdT_all(:,ind), nx,nT); %x_T
-            dydx_i = int.dydx(timelist(i), x_i, u_i);
-            dydx_i = dydx_i(outputlist(i),:);
-            
-            % Compute this y
-            y_i = y_all(outputlist(i),ind);
-            
-            % Compute dy/dT
-            dydT(i,:) = dydx_i * dxdT_i;
-            
-            % Compute expected V matrix
-            sigma(i) = sd(t_i, outputlist(i), y_i);
-        end
-    end
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%% Parameter fitting functions %%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     function [val, discrete] = G(int)
         % Evaluate solution
-        [ybar, sigma] = evaluate_sol(int);
+        [ybar, sigma] = evaluate_sol(outputlist, timelist, discrete_times, sd, int);
         e = ybar - measurements;
         
         % Goal function
@@ -226,7 +207,7 @@ obj = pastestruct(objectiveZero(), obj);
         % p = tau^(-n/2) * prod(sigma)^-1 * exp(-1/2 * sum(((ybar-yhat)/sigma)^2)
         
         % Evaluate solution
-        [ybar, sigma] = evaluate_sol(sol);
+        [ybar, sigma] = evaluate_sol(outputlist, timelist, discrete_times, sd, sol);
         e = ybar - measurements;
         
         val = (2*pi)^(-n/2) * prod(sigma).^-1 * exp(-1/2 * sum((e ./ sigma).^2));
@@ -237,22 +218,74 @@ obj = pastestruct(objectiveZero(), obj);
         % logp = -n/2 * log(tau) + -sum(log(sigma)) + -1/2 * sum(((ybar-yhat)/sigma)^2)
 
         % Evaluate solution
-        [ybar, sigma] = evaluate_sol(sol);
+        [ybar, sigma] = evaluate_sol(outputlist, timelist, discrete_times, sd, sol);
         e = ybar - measurements;
         
         val = -n/2 * log(2*pi) + -sum(log(sigma)) + -1/2 * sum((e ./ sigma).^2);
     end
 
+end
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%% Helper functions %%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function [ybar, sigma] = evaluate_sol(outputlist, timelist, discrete_times, sd, int)
+n = numel(outputlist);
+y_all = int.y;
+
+ybar = zeros(n,1);
+sigma = zeros(n,1);
+for i = 1:n
+    ind = discrete_times == timelist(i);
+    ybar(i) = y_all(outputlist(i),ind);
+    sigma(i) = sd(timelist(i), outputlist(i), ybar(i));
+end
+end
+
+function [dydT, sigma] = evaluate_grad(outputlist, timelist, discrete_times, sd, int)
+n = numel(outputlist);
+nT = int.nT;
+nx = int.nx;
+
+x_all = int.x;
+u_all = int.u;
+y_all = int.y;
+dxdT_all = int.dxdT;
+
+% Get dydT for every point
+dydT = zeros(n, nT);
+sigma = zeros(n,1);
+for i = 1:n
+    ind = find(discrete_times == timelist(i), 1);
+    t_i = timelist(i);
+    x_i = x_all(:,ind);
+    u_i = u_all(:,ind);
+    dxdT_i = reshape(dxdT_all(:,ind), nx,nT); %x_T
+    dydx_i = int.dydx(timelist(i), x_i, u_i);
+    dydx_i = dydx_i(outputlist(i),:);
+    
+    % Compute this y
+    y_i = y_all(outputlist(i),ind);
+    
+    % Compute dy/dT
+    dydT(i,:) = dydx_i * dxdT_i;
+    
+    % Compute expected V matrix
+    sigma(i) = sd(t_i, outputlist(i), y_i);
+end
+end
+
 %% Fisher information matrix
-    function val = F(sol)
-        % Evaluate solution
-        [dydT, sigma] = evaluate_grad(sol);
-        
-        % Assemble variance matrix
-        V = spdiags(sigma.^2,0,n,n);
-        
-        % Fisher information matrix
-        val = dydT.' * (V \ dydT);
-        val = symmat(val);
-    end
+function val = F(outputlist, timelist, discrete_times, sd, sol)
+n = numel(outputlist);
+
+% Evaluate solution
+[dydT, sigma] = evaluate_grad(outputlist, timelist, discrete_times, sd, sol);
+
+% Assemble variance matrix
+V = spdiags(sigma.^2,0,n,n);
+
+% Fisher information matrix
+val = dydT.' * (V \ dydT);
+val = symmat(val);
 end

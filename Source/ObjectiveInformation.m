@@ -75,6 +75,13 @@ end
 
 nCon = fit.nConditions;
 
+% Corner case of no conditions
+if nCon == 0
+    F = 0;
+    All = {};
+    return
+end
+
 % Clean up dxdTSol
 if exist('dxdTSol', 'var') && ~isempty(dxdTSol)
     if ~iscell(dxdTSol)

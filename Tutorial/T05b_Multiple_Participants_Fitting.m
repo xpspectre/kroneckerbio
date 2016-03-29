@@ -1,9 +1,13 @@
-% Test/tutorial script for multiple participants/experiments with datasets/objective functions
+%% T05b Multiple Participants Fitting
+% Test/tutorial script for multiple participants/experiments with
+%   datasets/objective functions, where some parameters are shared between
+%   participants and others are independent.
 
 %% Initialize fit object
 fit = FitObject('T05b_Mixed_Effects_Fit');
 
 %% Construct equilibrium experiment A + B <-> C with seeds
+addpath([fileparts(mfilename('fullpath')) '/../Testing']);
 m = equilibrium_model;
 
 fit.addModel(m);

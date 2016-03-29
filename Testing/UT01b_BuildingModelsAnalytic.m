@@ -84,6 +84,15 @@ m = FinalizeModel(m);
 a.verifyEqual(m.f(0,x0,u0), [15;15;-15;0])
 end
 
+function testAddRule(a)
+[m, x0, u0] = model_with_some_species();
+m = AddReaction(m, 'test', 'x1', 'x2', 'k3');
+m = AddParameter(m, 'k3', 0);
+m = AddRule(m, 'k3 rule', 'k3', 'sqrt(x1)');
+m = FinalizeModel(m);
+a.verifyEqual(m.f(0,x0,u0), [-sqrt(2);sqrt(2);0;0])
+end
+
 function testRepeatedComponents(a)
 % Consider adding repeated reaction and rule tests
 m = InitializeModelAnalytic();
@@ -130,7 +139,7 @@ a.verifyError(@()AddReaction(m, '', 'v1.x1.y1', {}, 'k*x1'), 'KroneckerBio:fixRe
 
 a.verifyError(@()AddReaction(m, '', 'v1.x1"y1', {}, 'k*x1'), 'KroneckerBio:fixReactionSpecies:InvalidNameDoubleQuotes')
 
-test = AddReaction(m, '', 'v1.x1', {}, 'k*"v1.x1"');
+test = AddReaction(m, '', 'v1.x1', {}, 'k*v1.x1');
 test = FinalizeModel(test);
 a.verifyEqual(test.nr, 1) % no error on finalization
 
@@ -142,11 +151,11 @@ test = AddReaction(m, '', {}, 'x1', 'k*x1', '', 'v1');
 test = FinalizeModel(test);
 a.verifyEqual(test.nr, 1)
 
-test = AddReaction(m, '', 'x1', {}, 'k*"v1.x1"', '', 'v1');
+test = AddReaction(m, '', 'x1', {}, 'k*v1.x1', '', 'v1');
 test = FinalizeModel(test);
 a.verifyEqual(test.nr, 1)
 
-test = AddReaction(m, '', 'x1', {}, 'k*"v2.x2"', '', 'v1');
+test = AddReaction(m, '', 'x1', {}, 'k*v2.x2', '', 'v1');
 test = FinalizeModel(test);
 a.verifyEqual(test.nr, 1)
 
@@ -159,7 +168,7 @@ a.verifyError(@()FinalizeModel(test), 'KroneckerBio:FinalizeModel:MissingUnquali
 test = AddReaction(m, '', 'x1', {}, 'k*x1');
 a.verifyError(@()FinalizeModel(test), 'KroneckerBio:FinalizeModel:AmbiguousSpeciesName')
 
-test = AddReaction(m, '', 'x1', {}, 'k*"v1.x1"');
+test = AddReaction(m, '', 'x1', {}, 'k*v1.x1');
 a.verifyError(@()FinalizeModel(test), 'KroneckerBio:FinalizeModel:AmbiguousSpeciesName')
 
 test = AddReaction(m, '', 'x1', {}, 'k*x2', '', 'v1');
@@ -236,6 +245,7 @@ m = AddState(m, 'x1', 'v1', 1);
 m = AddInput(m, 'u1', 'v1', 1);
 m = AddOutput(m, 'y1', 'x1');
 m = AddReaction(m, 'r1', 'x1', {}, 'k1*x1');
+m = AddRule(m, 'z1', 'z1', 'x1*x1');
 m = FinalizeModel(m);
 
 test = RemoveCompartment(m, 'v1');
@@ -272,10 +282,46 @@ test = RemoveReaction(m, 'r1');
 a.verifyEqual(test.nr, 0);
 a.verifyEqual(length(test.Reactions), 0);
 a.verifyError(@()RemoveReaction(m, 'r2'), 'KroneckerBio:RemoveReaction:ReactionNotFound');
+
+test = RemoveRule(m, 'z1');
+a.verifyEqual(test.nz, 0);
+a.verifyEqual(length(test.Rules), 0);
+a.verifyError(@()RemoveRule(m, 'z2'), 'KroneckerBio:RemoveRule:RuleNotFound');
+end
+
+function testAddComponentsAsOutputs(a)
+[m, x0, u0] = model_with_some_species();
+m = AddInput(m, 'u1', 'v1');
+m = AddInput(m, 'u2', 'v1');
+m = AddRule(m, 'z1', 'z1', 'x1*u1');
+m = AddRule(m, 'z2', 'z2', 'x2*u2');
+m = FinalizeModel(m);
+
+test = addStatesAsOutputs(m);
+a.verifyEqual(strcat('v1.', {m.States.Name}), {test.Outputs.Name})
+a.verifyEqual(strcat('v1.', {m.States.Name}), {test.Outputs.Expression})
+
+test = addStatesAsOutputs(m, false);
+a.verifyEqual({m.States.Name}, {test.Outputs.Name})
+
+test = addInputsAsOutputs(m);
+a.verifyEqual(strcat('v1.', {m.Inputs.Name}), {test.Outputs.Name})
+a.verifyEqual(strcat('v1.', {m.Inputs.Name}), {test.Outputs.Expression})
+
+test = addInputsAsOutputs(m, false);
+a.verifyEqual({m.Inputs.Name}, {test.Outputs.Name})
+
+test = addRulesAsOutputs(m);
+a.verifyEqual({m.Rules.Name}, {test.Outputs.Name})
+a.verifyEqual({m.Rules.Name}, {test.Outputs.Expression})
 end
 
 function testStateSpaceEqModelBuilding(a)
-a.verifyFail % Not implemented yet in this rebase - revisit when reorganizing models interface, possibly with a separate model type that specifies ODEs
+a.verifyFail % Not implemented yet in this rebase
+%   TODO: Revisit when reorganizing models interface, possibly with a separate
+%   model type that specifies ODEs. Alternatively, implement this using rate
+%   rules that directly modify m.f in finalizeModelAnalytic.
+%   
 % m = theo_model_statespace;
 % a.verifyEqual(m.nx, 2)
 % a.verifyEqual(m.f(0,[10,10],[]), [-15.0; 13.5])

@@ -39,6 +39,18 @@ function m = finalizeModelAnalytic(m, opts)
 %           computed. Note: required to evaluate exponents written usen the pow
 %           function. Try setting this to true if pow functions aren't
 %           recognized in final symbolic expressions and function handles.
+%       .SimplifyMethod [ string {''} ]
+%           Sets the symbolic simplification method used after each step of
+%           symbolic differentiation of the model's expressions. An empty
+%           string (the default) uses no simplification. 'simplify' uses
+%           the `simplify` procedure in MuPAD. 'simplifyFraction' uses the
+%           `simplifyFraction` procedure in MuPAD, which simplifies the
+%           expression and expresses it as a fraction where the greatest
+%           common divisor of the numerator and denominator is 1.
+%           Generally, simplification offers little benefit to model
+%           construction and can take significant amount of time to
+%           complete, so it is recommended in most cases to use no
+%           simplification.
 %       .Inf2Big [ true | {false} ]
 %           Whether to convert infinity values to large values in functions.
 %           This is technically incorrect but needed for some models.
@@ -67,9 +79,10 @@ default_opts.Order                     = 2;
 default_opts.Verbose                   = 0;
 default_opts.UseMEX                    = false;
 default_opts.MEXDirectory              = defaultMEXdirectory;
+default_opts.EvaluateExternalFunctions = true; % needed for calls to power() and other functions
+default_opts.SimplifyMethod            = '';
 default_opts.Inf2Big                   = false;
 default_opts.Nan2Zero                  = false;
-default_opts.EvaluateExternalFunctions = true; % needed for calls to power() and other functions
 
 opts = mergestruct(default_opts, opts);
 
@@ -77,6 +90,8 @@ verbose = logical(opts.Verbose);
 opts.Verbose = max(opts.Verbose-1,0);
 
 order = opts.Order;
+
+simplifyMethod = opts.SimplifyMethod;
 
 if opts.UseMEX && exist(opts.MEXDirectory,'dir') ~= 7
     mkdir(opts.MEXDirectory);
@@ -135,8 +150,8 @@ x0 = vec({m.States.InitialValue});
 
 r = vec({m.Reactions.Rate});
 
-z = {m.Rules.Expression}';
-zTarget = {m.Rules.Target}';
+zExpr = {m.Rules.Expression}';
+zTrgt = {m.Rules.Target}';
 zType = {m.Rules.Type}';
 
 y = vec({m.Outputs.Expression});
@@ -148,8 +163,6 @@ s_syms = vec(sym(arrayfun(@(i)sprintf('s_%dx', i), 1:ns, 'UniformOutput', false)
 k_syms = vec(sym(arrayfun(@(i)sprintf('k_%dx', i), 1:nk, 'UniformOutput', false)));
 u_syms = vec(sym(arrayfun(@(i)sprintf('u_%dx', i), 1:nu, 'UniformOutput', false)));
 x_syms = vec(sym(arrayfun(@(i)sprintf('x_%dx', i), 1:nx, 'UniformOutput', false)));
-z_syms = vec(sym(arrayfun(@(i)sprintf('z_%dx', i), 1:nz, 'UniformOutput', false)));
-y_syms = vec(sym(arrayfun(@(i)sprintf('y_%dx', i), 1:ny, 'UniformOutput', false)));
 
 t_strs = fastchar(t_syms);
 v_strs = fastchar(v_syms);
@@ -157,78 +170,77 @@ s_strs = fastchar(s_syms);
 k_strs = fastchar(k_syms);
 u_strs = fastchar(u_syms);
 x_strs = fastchar(x_syms);
-z_strs = fastchar(z_syms);
-y_strs = fastchar(y_syms);
 
 %% Build map of names to symbols
 % Check for uniquness of names
 % A name can be duplicated within species, but cannot otherwise be duplicated
 % Species full names cannot be duplicated, though
-assert_unique_name([v_names; s_names; k_names; unique(u_names); unique(x_names); z_names])
+assert_unique_name([v_names; s_names; k_names; unique(u_names); unique(x_names)])
 assert_unique_name([u_full_names; x_full_names])
 
 % Only unique species names can be referred to by their unqualified names
 % Unique species names and full names point to the same symbols
 ambiguous_names = [u_names(~unique_u_names); x_names(~unique_x_names)];
-all_names = [v_names; s_names; k_names; u_names(unique_u_names); x_names(unique_x_names); z_names; u_full_names; x_full_names];
-all_ids = [v_strs; s_strs; k_strs; u_strs(unique_u_names); x_strs(unique_x_names); z_strs; u_strs; x_strs];
+all_names = [v_names; s_names; k_names; u_names(unique_u_names); x_names(unique_x_names); u_full_names; x_full_names];
+all_ids = [v_strs; s_strs; k_strs; u_strs(unique_u_names); x_strs(unique_x_names); u_strs; x_strs];
 
 %% Replace names with symbolics and convert to symbolics
 % First test for ambiguous species
-assert_no_ambiguous_species(v, ambiguous_names, 'compartment');
+assert_no_ambiguous_species(v,  ambiguous_names, 'compartment');
 assert_no_ambiguous_species(x0, ambiguous_names, 'state');
-assert_no_ambiguous_species(z, ambiguous_names, 'rule');
-assert_no_ambiguous_species(r, ambiguous_names, 'reaction');
-assert_no_ambiguous_species(y, ambiguous_names, 'output');
+assert_no_ambiguous_species(r,  ambiguous_names, 'reaction');
+assert_no_ambiguous_species(y,  ambiguous_names, 'output');
+assert_no_ambiguous_species(zTrgt, ambiguous_names, 'rule');
 
-v  = substituteQuotedExpressions(v, all_names, all_ids);
+v  = substituteQuotedExpressions(v,  all_names, all_ids);
 x0 = substituteQuotedExpressions(x0, all_names, all_ids);
-z  = substituteQuotedExpressions(z, all_names, all_ids);
-r  = substituteQuotedExpressions(r, all_names, all_ids);
-y  = substituteQuotedExpressions(y, all_names, all_ids);
+r  = substituteQuotedExpressions(r,  all_names, all_ids);
+y  = substituteQuotedExpressions(y,  all_names, all_ids);
+zTrgt = substituteQuotedExpressions(zTrgt, all_names, all_ids);
+zExpr = substituteQuotedExpressions(zExpr, all_names, all_ids);
 
 v  = sym(v);
 x0 = sym(x0);
-z  = sym(z);
 r  = sym(r);
 y  = sym(y);
+zTrgt = sym(zTrgt);
+zExpr = sym(zExpr);
 
 %% Substitute in single sub rules separately
-zTarget = substituteQuotedExpressions(zTarget, all_names, all_ids);
-zTarget = sym(zTarget);
-
+% Using built-in "subs" function is sufficient since only a single symbolic
+%   expression is being substituted for each call
 singleSubRuleInds = find(ismember(zType, 'single sub'));
 nSingleSubRules = length(singleSubRuleInds);
 for i = 1:nSingleSubRules
-    target = zTarget(i);
-    expression = z(i);
-    r = subs(r, target, expression);
-    y = subs(y, target, expression);
+    target = zTrgt(i);
+    expression = zExpr(i);
+    x0 = subs(x0, target, expression);
+    r  = subs(r, target, expression);
+    y  = subs(y, target, expression);
 end
 
-%% Substitute in expressions
-% Everything that is substitutable
-substitutable_ids = [v_syms; z_syms];
-substitutable_exps = [v; z];
+%% Substitute in repeated assignment rules
+% Custom "fastsubs" function is used to speed up symbolic substitution by
+%   looping over vectors of symbolic expressions all inside Mupad
+% Volume expression substitution is also done here.
+repeatedAssignmentRuleInds = find(ismember(zType, 'repeated assignment'));
 
-% Need to substitute n times to ensure that all substitutions are complete
-n_subs = numel(substitutable_ids);
-for i = 1:n_subs
-    substitutable_exps = subs(substitutable_exps, substitutable_ids, substitutable_exps);
+subTrgts = [zTrgt(repeatedAssignmentRuleInds); v_syms];
+subExprs = [zExpr(repeatedAssignmentRuleInds); v];
+nSubs = numel(subTrgts);
+for i = 1:nSubs
+    subExprs = subs(subExprs, subTrgts, subExprs);
 end
 
-% Extract or replace
-v  = substitutable_exps(1:nv,1);
-x0 = fastsubs(x0, substitutable_ids, substitutable_exps);
-z  = substitutable_exps(nv+(1:nz),1);
-r  = fastsubs(r, substitutable_ids, substitutable_exps);
-y  = fastsubs(y, substitutable_ids, substitutable_exps);
+x0 = fastsubs(x0, subTrgts, subExprs);
+r  = fastsubs(r,  subTrgts, subExprs);
+y  = fastsubs(y,  subTrgts, subExprs);
 
 %% Evaluate external functions
 if opts.EvaluateExternalFunctions
     x0 = evaluate_external_functions(x0, [t_strs; s_strs; k_strs; u_strs; x_strs]);
-    r = evaluate_external_functions(r, [t_strs; s_strs; k_strs; u_strs; x_strs]);
-    y = evaluate_external_functions(y, [t_strs; s_strs; k_strs; u_strs; x_strs]);
+    r  = evaluate_external_functions(r,  [t_strs; s_strs; k_strs; u_strs; x_strs]);
+    y  = evaluate_external_functions(y,  [t_strs; s_strs; k_strs; u_strs; x_strs]);
 end
 
 %% Process stoichiometry and rate forms/RHS's
@@ -666,21 +678,16 @@ if verbose; fprintf('   ...done.\n'); end
 
 %% Set up model structure
 
-% Clear unnecessary variables from scope
-% Note: this currently includes a bunch of vars from old revisions that have
-%   since been deprecated/removed.
-% TODO: Make a new command that clears all symbolic vars
-clear SymModel v_syms k_syms s_syms S_sym qSyms xuSyms x_syms u_syms y_syms z_syms t_syms ...
-    vStrs kStrs sStrs qStrs xuStrs xStrs uStrs ...
-    xNamesFull uNamesFull vxNames vuNames ...
-    C1Entries C1Values C2Entries C2Values cEntries cValues ...
-    nC1Entries nC2Entries ncEntries defaultOpts opts ...
-    addlength currentLength iExpr ind match nAdd nExpr uAddInd sys_string ...
-    i iv ik is iq iu ix ir iy ...
-    rstates rinputs rparams statesubs inputsubs paramssubs rstatesi rinputsi rparamsi...
-    uqi qsinui nonzero_map sizes symbolic2stringmethod...
-    thistime defaultMEXdirectory ...
-    substitutable_exps substitutable_ids v z zTarget
+% Clear unnecessary symbolic variables from scope
+%   This is needed to suppress warnings when model is loaded into a workspace
+%   w/o the symbolic toolbox, such as when deployed with mcc
+varStruct = whos;
+varNames = {varStruct.name};
+varClasses = {varStruct.class};
+symVarNames = varNames(ismember(varClasses, 'sym'));
+for i = 1:length(symVarNames)
+    clear(symVarNames{i});
+end
 
 m.dv = dv;
 m.k  = k;
@@ -689,8 +696,6 @@ m.u  = u;
 
 m.vxInd = vxInd;
 m.vuInd = vuInd;
-
-clear vNames kNames sNames uNames xNames rNames yNames yMembers yValues
 
 m.f         = setfun_rf(f,k);
 
@@ -1042,7 +1047,7 @@ if verbose; fprintf('done.\n'); end
         end
         
         % Take derivatives of the possibly nonzero entries
-        nzders = diff_vectorized(vec(dydx1_(nzterms)), vec(x2Syms_(nzdens)));
+        nzders = diff_vectorized(vec(dydx1_(nzterms)), vec(x2Syms_(nzdens)), simplifyMethod);
         
         % Of the supposedly nonzero derivatives, find the ones that are
         % actually nonzero, and only keep those
@@ -1169,7 +1174,7 @@ function assert_no_ambiguous_species(expressions, ambiguous_names, type)
 try
     temp = @(input,i)transmute(input, ambiguous_names, type, i); % Matlab bug-ception
     for i = 1:numel(expressions)
-        expressions{i} = regexp(expressions{i}, '("[^"]*"|\<[A-Za-z_][A-Za-z0-9_]*\>)(?@temp($1,i))');
+        expressions{i} = regexp(expressions{i}, '((("[^"]*")|(\<[A-Za-z_][A-Za-z0-9_]*\>))(\.(("[^"]*")|(\<[A-Za-z_][A-Za-z0-9_]*\>)))?)(?@temp($1,i))');
     end
 catch ME % Matlab flaw: regexp swallows user-generated exception
    if (strcmp(ME.identifier,'MATLAB:REGEXP:EvaluationError'))
@@ -1183,13 +1188,11 @@ end
 end
 
 function transmute(input, ambiguous_names, type, i) % Matlab bug prevents this from being local to previous function
-if input(1) == '"'
-    % Quoted branch
-    index = lookupmember(input(2:end-1), ambiguous_names);
-else
-    % Identifier branch
-    index = lookupmember(input, ambiguous_names);
-end
+% Remove quote characters
+stripped_input = strrep(input, '"', '');
+
+index = lookupmember(stripped_input, ambiguous_names);
+    
 assert(index == 0, 'KroneckerBio:AmbiguousSpeciesName', 'The species "%s" used in %s #%i is ambiguous because there are several species in the model with that name', input, type, i)
 end
 

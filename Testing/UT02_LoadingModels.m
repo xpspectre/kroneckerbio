@@ -17,7 +17,7 @@ verifyDerivatives(a, m);
 end
 
 %% More comprehensive advanced model loading
-function testBasicSBMLLoading(a)
+function testBasicSbmlLoading(a)
 m = LoadModelSbmlAnalytic('test.xml');
 m = FinalizeModel(m);
 
@@ -31,7 +31,7 @@ a.verifyEqual(m.nz, 0);
 verifyDerivatives(a, m);
 end
 
-function testBasicSBMLLoadingAsSeeds(a)
+function testBasicSbmlLoadingWithSeeds(a)
 opts = [];
 opts.ICsAsSeeds = true;
 m = LoadModelSbmlAnalytic('test.xml', opts);
@@ -47,7 +47,7 @@ a.verifyEqual(m.nz, 0);
 verifyDerivatives(a, m);
 end
 
-function testEnzymeSBMLLoading(a)
+function testEnzymeSbmlLoading(a)
 m = LoadModelSbmlAnalytic('enzyme-catalysis-basic.xml');
 
 m = AddOutput(m, 'complex', '"E:S"');
@@ -82,6 +82,21 @@ m = simple_analytic_model();
 verifyDerivatives(a, m);
 end
 
+function testSimbioSbmlLoading(a)
+file = 'simple_analytic.xml';
+m1 = LoadModelSbmlAnalytic(file);
+m1 = FinalizeModel(m1);
+verifyDerivatives(a, m1);
+
+m2 = LoadModelSimBioAnalytic(file);
+% TODO: hack simbio to get the correct compartments out
+m2.Compartments(3).Dimension = 2;
+m2 = FinalizeModel(m2);
+verifyDerivatives(a, m2);
+
+compare_analytic_models(a, m1, m2)
+end
+
 function testHigherOrderDose(a)
 m = higher_order_dose_model();
 verifyDerivatives(a, m);
@@ -95,7 +110,7 @@ a.verifyEqual(m.d2x0dkds([4;5]), sparse([2],[3],[1],10,3))
 a.verifyEqual(m.d2x0dsdk([4;5]), sparse([12],[1],[1],15,2))
 end
 
-function testSimpleMassActionSBMLLoading(a)
+function testSimpleMassActionSbmlLoading(a)
 warning('off', 'symbolic2massaction:repeatedSpeciesNames'); % suppress warning for repeated species C
 m = LoadModelSbmlMassAction('simple_massaction.xml');
 warning('on', 'symbolic2massaction:repeatedSpeciesNames'); % reenable warning for continued session
@@ -105,7 +120,7 @@ m = FinalizeModel(m);
 verifyDerivatives(a, m);
 end
 
-function testSimpleMassActionAsAnalyticSBMLLoading(a)
+function testSimpleMassActionAsAnalyticSbmlLoading(a)
 opts = [];
 opts.EvaluateExternalFunctions = true; % simple_massaction has x^2 terms, and power needs to be evaluated
 m = LoadModelSbmlAnalytic('simple_massaction.xml');
@@ -181,4 +196,16 @@ end
 function verifyClose(a, x0, f, dfdx)
 [~, dfdx_finite, dfdx_analytic] = fdiff(x0, f, dfdx);
 a.verifyEqual(sparse(dfdx_finite), dfdx_analytic, 'RelTol', 0.001)
+end
+
+function compare_analytic_models(a, m1, m2)
+a.verifyEqual(m1.Name, m2.Name)
+a.verifyEqual(m1.Compartments, m2.Compartments)
+a.verifyEqual(m1.Parameters, m2.Parameters)
+a.verifyEqual(m1.Seeds, m2.Seeds)
+a.verifyEqual(m1.Inputs, m2.Inputs)
+a.verifyEqual(m1.States, m2.States)
+a.verifyEqual(m1.Reactions, m2.Reactions)
+a.verifyEqual(m1.Rules, m2.Rules)
+a.verifyEqual(m1.Outputs, m2.Outputs)
 end

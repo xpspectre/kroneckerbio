@@ -1,4 +1,4 @@
-function tests = UT16_FitObject()
+function tests = UT19_FitObject()
 tests = functiontests(localfunctions);
 if nargout < 1
     tests.run;

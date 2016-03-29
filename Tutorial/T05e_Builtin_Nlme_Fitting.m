@@ -1,4 +1,6 @@
+%% T05e Built-in NLME Fit
 % R-like nonlinear mixed effects fitting using builtin nlmefit and nlmefitsa
+% Note: This functionality hasn't been updated in a while. See native FO method.
 
 %% Initialize Fit Object
 fit = FitObject('T05e_Builtin_NLME_Fit');
@@ -74,6 +76,6 @@ opts.etas = {'ka', 'kel', 'V'};
 opts.ErrorModel = 'combined';
 
 %% Fit
-[fitOut, beta, psi, stats] = FitNLME(fit, opts);
+[fitOut, beta, psi, stats] = FitObjectiveNlmeBuiltin(fit, opts);
 
 %% Analyze results

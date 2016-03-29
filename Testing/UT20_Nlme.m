@@ -1,4 +1,4 @@
-function tests = UT17_Nlme()
+function tests = UT20_Nlme()
 tests = functiontests(localfunctions);
 if nargout < 1
     tests.run;

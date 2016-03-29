@@ -1,3 +1,4 @@
+%% T08a NLME FO Simple Linear Model Test
 % Test FO with simple linear model
 %   Model: 0 -> x with 0-th order rate k
 %   The analytic solution to this model is x[t] = kt

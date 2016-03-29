@@ -1158,7 +1158,7 @@ classdef FitObject < handle
            useDoseControls = fixUseControls(opts.UseDoseControls, nCon, cat(1,conditions.nh));
            
            % Standardize AbsTol
-           absTol = {opts.AbsTol};
+           absTol = repmat({opts.AbsTol}, nCon, 1);
            
            % Make new fit object
            fit = FitObject('ConvertedFit');
@@ -1176,7 +1176,7 @@ classdef FitObject < handle
                conditionOpts.UseSeeds         = useSeeds(:,i);
                conditionOpts.UseInputControls = useInputControls{i};
                conditionOpts.UseDoseControls  = useDoseControls{i};
-               conditionOpts.AbsTol = absTol{i};
+               conditionOpts.AbsTol           = absTol{i};
                fit.addCondition(conditions(i), conditionOpts);
            end
            

@@ -199,12 +199,14 @@ y  = substituteQuotedExpressions(y,  all_names, all_ids);
 zTrgt = substituteQuotedExpressions(zTrgt, all_names, all_ids);
 zExpr = substituteQuotedExpressions(zExpr, all_names, all_ids);
 
+if ~verLessThan('matlab', '9.0'); st = warning('off', 'symbolic:sym:sym:DeprecateExpressions'); end
 v  = sym(v);
 x0 = sym(x0);
 r  = sym(r);
 y  = sym(y);
 zTrgt = sym(zTrgt);
 zExpr = sym(zExpr);
+if ~verLessThan('matlab', '9.0') && strcmp(st.state, 'on'); warning('on', 'symbolic:sym:sym:DeprecateExpressions'); end
 
 %% Substitute in single sub rules separately
 % Using built-in "subs" function is sufficient since only a single symbolic

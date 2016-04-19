@@ -314,11 +314,6 @@ end
         end
         if nargout == 2
             [G, D] = fit.computeObjective;
-            
-            % Normalize gradient
-            if opts.Normalized
-                D = D .* fit.collectParams;
-            end
         end
         
     end

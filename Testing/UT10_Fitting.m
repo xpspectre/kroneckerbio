@@ -36,14 +36,18 @@ function testMichaelisMentenFitting(a)
 
 Gold = ObjectiveValue(m, con, obj, opts);
 
-tic;
-[m, con] = FitObjective(m, con, obj, opts);
-time = toc;
+timer = tic;
+[m, con, G, D] = FitObjective(m, con, obj, opts);
+time = toc(timer);
 
 Gnew = ObjectiveValue(m, con, obj, opts);
+Dnew = ObjectiveGradient(m, con, obj, opts);
 
 a.verifyLessThan(Gnew, Gold)
 a.verifyLessThan(time, 12) % sec, Hack to verify it finishes quickly with correct obj fun grad in FitObjective
+
+a.verifyEqual(G, Gnew, 'RelTol', 1e-4)
+a.verifyEqual(D, Dnew, 'RelTol', 1e-4)
 end
 
 function testMakeMultiConditionFit(a)

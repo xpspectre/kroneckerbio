@@ -259,7 +259,6 @@ end
 % Unnormalize
 if opts.Normalized
     Tbest = exp(Tbest);
-    D = D ./ Tbest;
 end
 
 % Update parameter sets

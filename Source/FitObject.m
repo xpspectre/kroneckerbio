@@ -20,7 +20,10 @@ classdef FitObject < handle
     %   visitor: implementing additional actions for hierarchy components - may
     %       be excessive
     %   decorator: adding fitting-specific functionality to components w/o
-    %       polluting them when they're simply used for simulating
+    %       polluting them when they're simply used for simulating - I
+    %       needed this functionality for adding stuff to models but worked
+    %       hacked in extra fields by making an additional m.Update
+    %       function that allows variables to be added.
     
    properties
        Name
@@ -198,7 +201,11 @@ classdef FitObject < handle
            %    opts [ struct ]
            %        Options struct allowing the following fields:
            %        .BaseModel [ string ]
-           %            Name of model already existing 
+           %            Name of model already existing in FitObject. Used
+           %            to indicate this model was automatically generated
+           %            to serve as a dummy to allow parameters to vary
+           %            between conditions based off the same original
+           %            model.
            % Side Effects:
            %    Adds model to fit object; updates components map
            
@@ -211,7 +218,7 @@ classdef FitObject < handle
            opts = mergestruct(opts_, opts);
            
            % Validate and annotate models with new information
-           model.BaseModel = opts.BaseModel;
+           model = model.UpdateExtra(struct('BaseModel', opts.BaseModel));
            
            % Add model to fit object
            this.Models = [this.Models; model];
@@ -289,7 +296,7 @@ classdef FitObject < handle
            %
            % Side Effects:
            %    Adds condition to fit object; updates component map. Annotates
-           %    condition struct with:
+           %    condition.Extra with:
            %        .ParentModelIdx [ scalar double ]
            %            Index of model this condition refers to in fit object
            %        .ParamsSpec [1 x 4 cell vector of nx x 1 double vectors ]
@@ -313,23 +320,24 @@ classdef FitObject < handle
            end
            
            % Check that associated model is already in fit object
-           parentModelMask = ismember(this.modelNames, condition.ParentModelName);
+           parentModelName = condition.Extra.ParentModelName;
+           parentModelMask = ismember(this.modelNames, parentModelName);
            if ~parentModelMask
-               error('FitObject:addCondition: Condition parent model %s not present in fit object.', condition.ParentModelName)
+               error('FitObject:addCondition: Condition parent model %s not present in fit object.', parentModelName)
            end
            
            % Add associated model index to condition for convenience
            parentModelIdx = find(parentModelMask);
-           condition.ParentModelIdx = parentModelIdx;
+           condition = condition.UpdateExtra(struct('ParentModelIdx', parentModelIdx));
            
            % Correct count of each param type
-           nk = this.Models(condition.ParentModelIdx).nk;
+           nk = this.Models(parentModelIdx).nk;
            ns = condition.ns;
            nq = condition.nq;
            nh = condition.nh;
            
            % Existing params
-           kStart = this.Models(condition.ParentModelIdx).k;
+           kStart = this.Models(parentModelIdx).k;
            sStart = condition.s;
            qStart = condition.q;
            hStart = condition.h;
@@ -363,8 +371,8 @@ classdef FitObject < handle
            opts = mergestruct(opts_, opts);
            
            % Parameter names for convenience
-           kNames = {this.Models(condition.ParentModelIdx).Parameters.Name}';
-           sNames = {this.Models(condition.ParentModelIdx).Seeds.Name}';
+           kNames = {this.Models(parentModelIdx).Parameters.Name}';
+           sNames = {this.Models(parentModelIdx).Seeds.Name}';
            % TODO: names for input and dose control params?
            
            % Convert opts.ParamSpec and populate corresponding fields
@@ -413,7 +421,9 @@ classdef FitObject < handle
            bounds{2,3} = fixBounds(opts.InputControlUpperBound, nq);
            bounds{1,4} = fixBounds(opts.DoseControlLowerBound, nh);
            bounds{2,4} = fixBounds(opts.DoseControlUpperBound, nh);
-           condition.Bounds = bounds;
+           update = [];
+           update.Bounds = bounds;
+           condition = condition.UpdateExtra(update);
            
            % Sanity check: make sure useX are valid for model and condition
            assert(nk == length(opts.UseParams), 'FitObject:addCondition: Number of UseParams doesn''t match number of model rate params')
@@ -422,10 +432,12 @@ classdef FitObject < handle
            assert(nh == length(opts.UseDoseControls), 'FitObject:addCondition: Number of UseDoseControls doesn''t match number of model dose control params')
            
            % Validate params specs and add to condition
-           condition.ParamsSpec = {fixParamsSpec(opts.UseParams, nk), ...
-               fixParamsSpec(opts.UseSeeds, ns), ...
-               fixParamsSpec(opts.UseInputControls, nq), ...
-               fixParamsSpec(opts.UseDoseControls, nh)};
+           update = []; % Need to assemble struct literal because can't call "struct()" fun on cell array
+           update.ParamsSpec = {fixParamsSpec(opts.UseParams, nk), ...
+                                fixParamsSpec(opts.UseSeeds, ns), ...
+                                fixParamsSpec(opts.UseInputControls, nq), ...
+                                fixParamsSpec(opts.UseDoseControls, nh)};
+           condition = condition.UpdateExtra(update);
            
            % Override starting params that are fit with user specified values
            % If Starting* aren't supplied, default values from underlying model
@@ -448,19 +460,16 @@ classdef FitObject < handle
                hStart(hUse) = validateBounds(opts.StartingDoseControls(hUse), bounds{1,4}(hUse), bounds{2,4}(hUse));
            end
            
-           modelName = this.Models(parentModelIdx).Name;
            if ~isempty(opts.StartingParams) && any(kUse)
-               this.Models(parentModelIdx) = mergestruct(this.Models(parentModelIdx), this.Models(parentModelIdx).Update(kStart));
-               this.Models(parentModelIdx).Name = modelName; % hack needed because externally modified fields are lost on model Update
+               this.Models(parentModelIdx) = this.Models(parentModelIdx).Update(kStart);
            end
            if (~isempty(opts.StartingSeeds) && any(sUse)) || (~isempty(opts.UseInputControls) && any(qUse)) || (~isempty(opts.StartingDoseControls) && any(hUse))
-               condition = mergestruct(condition, condition.Update(sStart, qStart, hStart));
-               condition.ParentModelName = modelName;
+               condition = condition.Update(sStart, qStart, hStart);
            end
            
            % Add tolerances
-           condition.RelTol = opts.RelTol;
-           condition.AbsTol = opts.AbsTol;
+           condition = condition.UpdateExtra(struct('RelTol', opts.RelTol, ...
+               'AbsTol', opts.AbsTol));
            
            % Add condition to fit object
            this.Conditions = [this.Conditions; condition];
@@ -524,16 +533,17 @@ classdef FitObject < handle
                objective.Weight = opts.Weight;
                
                % Annotate objective with parent condition it's applied to
+               %    Objective functions aren't closures so this just works
                parentConditionName = this.conditionNames{conditionsIdxs(i)};
                objective.ParentConditionName = parentConditionName;
                
                % Sanity check: make sure output indices in objective map to actual
                % outputs in model (referenced thru condition)
-               parentConditionIdx = ismember(this.conditionNames, parentConditionName);
-               assert(sum(parentConditionIdx) < 2, 'FitObject:addObjective:ConditionNameCollision', 'Multiple conditions have the same name. Make sure conditions have unique names. But we should change this so they''re automatically renamed.')
-               parentModelIdx = ismember(this.modelNames, this.Conditions(parentConditionIdx).ParentModelName);
-               parentModelName = this.Models(parentModelIdx).Name;
-               outputNames = {this.Models(parentModelIdx).Outputs.Name};
+               parentConditionMask = ismember(this.conditionNames, parentConditionName);
+               assert(sum(parentConditionMask) < 2, 'FitObject:addObjective:ConditionNameCollision', 'Multiple conditions have the same name. Make sure conditions have unique names. But we should change this so they''re automatically renamed.')
+               parentModelMask = ismember(this.modelNames, this.Conditions(parentConditionMask).Extra.ParentModelName);
+               parentModelName = this.Models(parentModelMask).Name;
+               outputNames = {this.Models(parentModelMask).Outputs.Name};
                if isnumeric(objective.Outputs)
                    try
                        fitOutputs = outputNames(objective.Outputs);
@@ -601,10 +611,10 @@ classdef FitObject < handle
            end
            
            % Check existing models for existence of valid parent model
-           parentModelName = condition.ParentModelName;
+           parentModelName = condition.Extra.ParentModelName;
            assert(any(ismember(this.modelNames, parentModelName)), 'FitObject:addFitConditionData: Parent model %s does not exist.', parentModelName)
            
-           % Get UseParams from ParamSpec to determine if new model is needed
+           % If ParamSpec is present, convert it to UseParams for next step
            if isfield(opts, 'ParamSpec')
                kNames = {this.Models(ismember(this.modelNames, parentModelName)).Parameters.Name};
                opts.UseParams = zeros(length(kNames),1);
@@ -627,16 +637,20 @@ classdef FitObject < handle
            end
            
            % Check if specified fit params match an existing model/condition; if
-           % condition specifies different fit params for an existing model,
-           % make a dummy model. Needed because models specify k inside them
+           %    condition specifies different fit params for an existing model,
+           %    make a dummy model. Needed because models specify k inside them
+           % If UseParams is not specified, the default is for all params
+           %    to be fit with the same vals for each model (and no dummy model is needed) 
            if isfield(opts, 'UseParams')
                
                opts.UseParams = vec(opts.UseParams);
                
                assert(this.Models(ismember(this.modelNames, parentModelName)).nk == length(opts.UseParams), 'FitObject:addFitConditionData: Number of UseParams doesn''t match number of model rate params')
                
-               % parentModelIdx = 0 for no valid model; positive integer for valid model to attach to
                % See if a model with exactly the same params to fit already exists
+               %    parentModelIdx = 0 for no valid model; positive integer
+               %    for valid model to attach to (usually the 1st
+               %    condition)
                parentModelIdx = this.paramMapper.isSharedParamSpec(opts.UseParams);
                
                % See if valid parent model w/o an attached condition exists
@@ -645,17 +659,19 @@ classdef FitObject < handle
                end
                
                % Add dummy model if no valid model to attach to (existing parent model attached to other condition)
+               %    A model with the m.Extra.DummyName field set uses the
+               %    DummyName instead of its regular name when being
+               %    referenced by conditions
                if parentModelIdx == 0
                    model_ = this.getModel(parentModelName);
-                   model_.Name = [model_.Name '_der' num2str(this.nModels)];
-                   opts_ = [];
-                   opts_.BaseModel = parentModelName;
-                   this.addModel(model_, opts_)
-                   parentModelIdx = this.nModels; % attach to last/newly created model
+                   dummyName = [model_.Name '_der' num2str(this.nModels)]; % hope this is unique
+                   model_ = model_.UpdateExtra(struct('DummyName', dummyName));
+                   this.addModel(model_, struct('BaseModel', parentModelName))
+                   parentModelName = dummyName;
                end
                
                % Attach condition to model
-               condition.ParentModelName = this.modelNames{parentModelIdx}; % but this isn't permanent
+               condition = condition.UpdateExtra(struct('ParentModelName', parentModelName));
            end
            
            % Add components to fit
@@ -675,9 +691,11 @@ classdef FitObject < handle
            if isempty(this.Conditions) % no conditions attached to anything yet
                return
            end
-           parentModelNames = {this.Conditions.ParentModelName};
-           if any(ismember(parentModelNames, modelName))
-               attached = true;
+           for i = 1:this.nConditions
+               if strcmp(this.Conditions(i).Extra.ParentModelName, modelName)
+                   attached = true;
+                   return
+               end
            end
        end
        
@@ -689,11 +707,11 @@ classdef FitObject < handle
            % Outputs:
            %    model [ model struct ]
            %        Model struct with input name
-           modelIdx = ismember(this.modelNames, name);
-           if ~any(modelIdx)
+           modelMask = ismember(this.modelNames, name);
+           if ~any(modelMask)
                error('FitObject:getModel: Model %s not found', name)
            end
-           model = this.Models(modelIdx);
+           model = this.Models(modelMask);
        end
        
        function condition = getCondition(this, name)
@@ -704,11 +722,11 @@ classdef FitObject < handle
            % Outputs:
            %    model [ condition struct ]
            %        Condition struct with input name
-           conditionIdx = ismember(this.conditionNames, name);
-           if ~any(conditionIdx)
+           conditionMask = ismember(this.conditionNames, name);
+           if ~any(conditionMask)
                error('FitObject:getCondition: Condition %s not found', name)
            end
-           condition = this.Conditions(conditionIdx);
+           condition = this.Conditions(conditionMask);
        end
        
        %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -752,13 +770,14 @@ classdef FitObject < handle
                
                Gs = zeros(this.nConditions,1);
                for i = 1:nCon
-                   modelIdx = this.Conditions(i).ParentModelIdx;
-                   objectives = this.Objectives(this.componentMap(:,2) == i)';
+                   iCon = conditions(i);
+                   modelIdx = this.Conditions(iCon).Extra.ParentModelIdx;
+                   objectives = this.Objectives(this.componentMap(:,2) == iCon)';
                    
                    if this.options.ComputeSensPlusOne
-                       Gs(i) = computeObjGrad(this.Models(modelIdx), this.Conditions(i), objectives, this.options);
+                       Gs(i) = computeObjGrad(this.Models(modelIdx), this.Conditions(iCon), objectives, this.options);
                    else
-                       Gs(i) = computeObj(this.Models(modelIdx), this.Conditions(i), objectives, this.options);
+                       Gs(i) = computeObj(this.Models(modelIdx), this.Conditions(iCon), objectives, this.options);
                    end
                end
                G = sum(Gs);
@@ -771,7 +790,7 @@ classdef FitObject < handle
                Ds = cell(nCon,1);
                for i = 1:nCon
                    iCon = conditions(i);
-                   modelIdx = this.Conditions(iCon).ParentModelIdx;
+                   modelIdx = this.Conditions(iCon).Extra.ParentModelIdx;
                    objectives = this.Objectives(this.componentMap(:,2) == iCon)';
                    
                    if this.options.ComputeSensPlusOne
@@ -795,7 +814,7 @@ classdef FitObject < handle
                Hs = cell(nCon,1);
                for i = 1:nCon
                    iCon = conditions(i);
-                   modelIdx = this.Conditions(iCon).ParentModelIdx;
+                   modelIdx = this.Conditions(iCon).Extra.ParentModelIdx;
                    objectives = this.Objectives(this.componentMap(:,2) == iCon)';
                    
                    if this.options.ComputeSensPlusOne
@@ -847,7 +866,7 @@ classdef FitObject < handle
            
            Fs = cell(nCon,1);
            for i = 1:nCon
-               modelIdx = this.Conditions(i).ParentModelIdx;
+               modelIdx = this.Conditions(i).Extra.ParentModelIdx;
                objectives = this.Objectives(this.componentMap(:,2) == i)';
                
                Fi = computeObjInfo(this.Models(modelIdx), this.Conditions(i), objectives, this.options, dxdTSol{i});
@@ -880,7 +899,7 @@ classdef FitObject < handle
            % Put params in same format as param mapper
            Tlocals = cell(this.nConditions,1);
            for i = 1:this.nConditions
-               parentModelIdx = this.Conditions(i).ParentModelIdx;
+               parentModelIdx = this.Conditions(i).Extra.ParentModelIdx;
                Tlocal = {this.Models(parentModelIdx).k; ...
                    this.Conditions(i).s; ...
                    this.Conditions(i).q; ...
@@ -906,7 +925,7 @@ classdef FitObject < handle
                            kNames = {this.Models(Ind{i}).Parameters.Name};
                            Name{i} = kNames{details_(i,2)};
                        case 's'
-                           parentModelIdx = this.Conditions(Ind{i}).ParentModelIdx;
+                           parentModelIdx = this.Conditions(Ind{i}).Extra.ParentModelIdx;
                            sNames = {this.Models(parentModelIdx).Seeds.Name};
                            Name{i} = sNames{details_(i,2)};
                        otherwise
@@ -934,19 +953,15 @@ classdef FitObject < handle
            
            % Update conditions with Tlocals
            for i = 1:this.nConditions
-               parentModelIdx = this.Conditions(i).ParentModelIdx;
+               parentModelIdx = this.Conditions(i).Extra.ParentModelIdx;
                
                % Paste updated param values over old values containing params not fit
                Tlocalold = {this.Models(parentModelIdx).k, this.Conditions(i).s, this.Conditions(i).q, this.Conditions(i).h};
                Tlocal = combineCellMats(Tlocalold, Tlocals{i});
                [k,s,q,h] = deal(Tlocal{:});
                
-               % mergestruct is exactly what's needed here, but I think this is slow
-               % This is a prime reason why we should convert components to objects
-               modelName = this.Models(parentModelIdx).Name;
-               this.Models(parentModelIdx) = mergestruct(this.Models(parentModelIdx), this.Models(parentModelIdx).Update(k));
-               this.Models(parentModelIdx).Name = modelName; % hack needed because externally modified fields are lost on model Update
-               this.Conditions(i) = mergestruct(this.Conditions(i), this.Conditions(i).Update(s, q, h));
+               this.Models(parentModelIdx) = this.Models(parentModelIdx).Update(k);
+               this.Conditions(i) = this.Conditions(i).Update(s, q, h);
            end
        end
        
@@ -963,8 +978,8 @@ classdef FitObject < handle
            LowerBounds = cell(this.nConditions,1);
            UpperBounds = cell(this.nConditions,1);
            for i = 1:this.nConditions
-               LowerBounds{i} = this.Conditions(i).Bounds(1,:)';
-               UpperBounds{i} = this.Conditions(i).Bounds(2,:)';
+               LowerBounds{i} = this.Conditions(i).Extra.Bounds(1,:)';
+               UpperBounds{i} = this.Conditions(i).Extra.Bounds(2,:)';
            end
            LowerBound = this.paramMapper.Tlocal2T(LowerBounds);
            UpperBound = this.paramMapper.Tlocal2T(UpperBounds);
@@ -975,12 +990,18 @@ classdef FitObject < handle
        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
        function updateModels(this)
            % Update fit object fields when model is added
+           % Uses the model.Extra.DummyName field if present, reflecting an
+           %    automatically added model
            nModels_ = length(this.Models);
            this.nModels = nModels_;
            
            modelNames_ = cell(nModels_,1);
            for i = 1:nModels_
-               modelNames_{i} = this.Models(i).Name;
+               if isfield(this.Models(i).Extra, 'DummyName')
+                   modelNames_{i} = this.Models(i).Extra.DummyName;
+               else
+                   modelNames_{i} = this.Models(i).Name;
+               end
            end
            this.modelNames = modelNames_;
        end
@@ -1026,7 +1047,7 @@ classdef FitObject < handle
            for i = 1:this.nObjectives
                conditionName = this.Objectives(i).ParentConditionName;
                conditionIdx = find(ismember(this.conditionNames, conditionName));
-               modelName = this.Conditions(conditionIdx).ParentModelName;
+               modelName = this.Conditions(conditionIdx).Extra.ParentModelName;
                modelIdx = find(ismember(this.modelNames, modelName));
                componentMap_(i,:) = [modelIdx, conditionIdx, i];
            end
@@ -1038,7 +1059,7 @@ classdef FitObject < handle
            modelClassMap_ = zeros(this.nObjectives, 1);
            baseModels = cell(0,1);
            for i = 1:this.nObjectives
-               baseModel = this.Models(this.componentMap(i,1)).BaseModel;
+               baseModel = this.Models(this.componentMap(i,1)).Extra.BaseModel;
                baseModelMask = ismember(baseModels, baseModel);
                if any(baseModelMask)
                    modelClassMap_(i) = find(baseModelMask, 1);

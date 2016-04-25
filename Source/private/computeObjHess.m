@@ -26,14 +26,14 @@ function [G, D, H] = computeObjHess(m, con, obj, opts)
 % Process options
 % Note: this currently acts as a shim to existing code - a lot of this can be
 % cleaned up in the future
-opts.UseParams        = logical(con.ParamsSpec{1});
-opts.UseSeeds         = logical(con.ParamsSpec{2});
-opts.UseInputControls = logical(con.ParamsSpec{3});
-opts.UseDoseControls  = logical(con.ParamsSpec{4});
+opts.UseParams        = logical(con.Extra.ParamsSpec{1});
+opts.UseSeeds         = logical(con.Extra.ParamsSpec{2});
+opts.UseInputControls = logical(con.Extra.ParamsSpec{3});
+opts.UseDoseControls  = logical(con.Extra.ParamsSpec{4});
 
 opts.continuous = any(obj(:).Continuous);
-opts.RelTol = con.RelTol;
-AbsTol = fixAbsTol(con.AbsTol, 3, opts.continuous, m.nx, 1, opts.UseAdjoint, opts.UseParams, opts.UseSeeds, {opts.UseInputControls}, {opts.UseDoseControls});
+opts.RelTol = con.Extra.RelTol;
+AbsTol = fixAbsTol(con.Extra.AbsTol, 3, opts.continuous, m.nx, 1, opts.UseAdjoint, opts.UseParams, opts.UseSeeds, {opts.UseInputControls}, {opts.UseDoseControls});
 opts.AbsTol = AbsTol{1};
 opts.ObjWeights = [obj(:).Weight];
 

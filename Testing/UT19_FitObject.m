@@ -86,3 +86,92 @@ fit.addFitConditionData(a.TestData.objfun2, a.TestData.experiment2, opts);
 a.assertEqual(fit.componentMap, [1,1,1;2,2,2]);
 
 end
+
+function testMassActionModelUpdateExtra(a)
+% Make sure extra field works and updates persist across m.Update
+m = a.TestData.model;
+
+[extra, extra2] = makeExtraData;
+
+% Extra data survives m.Update
+m = m.UpdateExtra(extra);
+k = m.k;
+knew = k + rand(size(k));
+m = m.Update(knew);
+verifyExtraData(a, m.Extra, extra);
+
+% Extra data can be overridden
+m = m.UpdateExtra(extra2);
+verifyExtraData(a, m.Extra, extra, extra2);
+end
+
+function testAnalyticModelUpdateExtra(a)
+m = equilibrium_model_analytic;
+
+[extra, extra2] = makeExtraData;
+
+% Extra data survives m.Update
+m = m.UpdateExtra(extra);
+k = m.k;
+knew = k + rand(size(k));
+m = m.Update(knew);
+verifyExtraData(a, m.Extra, extra);
+
+% Extra data can be overridden
+m = m.UpdateExtra(extra2);
+verifyExtraData(a, m.Extra, extra, extra2);
+end
+
+function testInitialValueExperimentUpdateExtra(a)
+con = a.TestData.experiment;
+
+[extra, extra2] = makeExtraData;
+
+% Extra data survives con.Update
+con = con.UpdateExtra(extra);
+s = con.s;
+snew = s + rand(size(s));
+con = con.Update(snew, [], []);
+verifyExtraData(a, con.Extra, extra);
+
+% Extra data can be overridden
+con = con.UpdateExtra(extra2);
+verifyExtraData(a, con.Extra, extra, extra2);
+end
+
+function testSteadyStateExperimentUpdateExtra(a)
+m = a.TestData.model;
+con = experimentSteadyState(m, [], [], [], [], [], 'SteadyStateExperiment');
+
+[extra, extra2] = makeExtraData;
+
+% Extra data survives con.Update
+con = con.UpdateExtra(extra);
+s = con.s;
+snew = s + rand(size(s));
+con = con.Update(snew, [], []);
+verifyExtraData(a, con.Extra, extra);
+
+% Extra data can be overridden
+con = con.UpdateExtra(extra2);
+verifyExtraData(a, con.Extra, extra, extra2);
+end
+
+function [extra, extra2] = makeExtraData
+extra = [];
+extra.a = 1;
+extra.b = [1,2,3];
+extra.c = {1,2,3};
+extra.d = 'extrastring';
+
+extra2 = [];
+extra2.b = [9,9,9];
+end
+
+function verifyExtraData(a, teststruct, extra, extra2)
+if nargin == 4
+    extra = pastestruct(extra, extra2);
+end
+teststruct = pastestruct(extra, teststruct); % just look for fields matching extra
+a.verifyEqual(teststruct, extra);
+end

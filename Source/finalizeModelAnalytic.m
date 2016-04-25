@@ -785,6 +785,7 @@ end
 
 m.Ready  = true;
 m.Update = @update;
+m.UpdateExtra = @updateExtra;
 
 if verbose; fprintf('done.\n'); end
 
@@ -864,6 +865,19 @@ if verbose; fprintf('done.\n'); end
         end
         
         m.Update = @update;
+        
+        varargout{1} = m;
+    end
+
+    function varargout = updateExtra(extra) % TODO: Why is this varargout?
+        % Apply changes
+        fields = fieldnames(extra);
+        for iField = 1:length(fields)
+            field = fields{iField};
+            m.Extra.(field) = extra.(field);
+        end
+        
+        m.UpdateExtra = @updateExtra;
         
         varargout{1} = m;
     end

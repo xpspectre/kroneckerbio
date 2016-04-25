@@ -1,59 +1,60 @@
-function con = experimentSteadyState(m, s, basal_input, inp, dos, time_scale, name)
+function con = experimentSteadyState(m, s, basal_input, inp, dos, time_scale, name, extra)
 %experimentSteadyState Construct a KroneckerBio experimental conditions
 %   structure describing a initial value problem first run to steady state
 %
 %   con = experimentSteadyState(m, s, basal_input, inp, dos, time_scale, name)
 %
-%   Inputs
-%   m: [ model struct scalar ]
+%   Inputs:
+%   m [ model struct scalar ]
 %       The KroneckerBio model for which these experiments will be run
-%   s: [ nonnegative vector ns ]
-%       Default = m.s
-%       The values of the seed parameters
+%   s [ nonnegative vector ns { m.s } ]
+%       The values of the seed parameters. Defaults to seed values in the
+%       model.
 %   basal_input [ input struct scalar | handle @(t) returns nonegative vector nu |
-%          nonnegative vector nu ]
-%       Default = m.u
+%          nonnegative vector nu { m.u } ]
 %       The definition of the input species values to be applied at t < 0,
 %       during the simulation up to steady state
-%   inp: [ input struct scalar | handle @(t) returns nonegative vector nu |
-%          nonnegative vector nu ]
-%       Default = m.u
+%   inp [ input struct scalar | handle @(t) returns nonegative vector nu |
+%          nonnegative vector nu { m.u } ]
 %       The definition of the input species values to be applied at t >= 0,
 %       after steady state has been reached
-%   dos: [ dose struct scalar ]
-%       Default = doseZero(m)
-%       The definition of the dose amounts and schedule
-%   time_scale: [ nonnegative scalar ]
-%       Default = 10
+%   dos [ dose struct scalar { doseZero(m) } ]
+%       The definition of the dose amounts and schedule. Defaults to no
+%       dosing.
+%   time_scale [ nonnegative scalar { 10 } ]
 %       The typical time scale for an observation. The steady state is
 %       determined to be reached when the states are expected to change
 %       less than the tolerance over this time scale.
-%   name: [ string ]
-%       Default = ''
+%   name [ string { '' } ]
 %       An arbitrary name for the experiment
-
+%   extra [ struct ]
+%       Misc extra key-value pairs in a struct.
 %
-%   Outputs
-%   con: [ experiment struct scalar ]
+% Outputs:
+%   con [ experiment struct scalar ]
 %       The KroneckerBio experimental conditions structure
 %
 %   For the meanings of the fields of con see "help experimentZero"
+
 % (c) 2016 David R Hagen & Bruce Tidor
 % This work is released under the MIT license.
 
 % Clean-up inputs
-if nargin < 7
-    name = [];
-    if nargin < 6
-        time_scale = [];
-        if nargin < 5
-            dos = [];
-            if nargin < 4
-                inp = [];
-                if nargin < 3
-                    basal_input = [];
-                    if nargin < 2
-                        s = [];
+if nargin < 8
+    extra = [];
+    if nargin < 7
+        name = [];
+        if nargin < 6
+            time_scale = [];
+            if nargin < 5
+                dos = [];
+                if nargin < 4
+                    inp = [];
+                    if nargin < 3
+                        basal_input = [];
+                        if nargin < 2
+                            s = [];
+                        end
                     end
                 end
             end
@@ -114,7 +115,6 @@ assert(ischar(name), 'KroneckerBio:Experiment:name', 'name must be a string')
 % Build experiment
 con.Type = 'Experiment:SteadyState';
 con.Name = name;
-con.ParentModelName = parentModelName;
 con.nu = m.nu;
 con.ns = m.ns;
 con.nq = numel(inp.q);
@@ -132,10 +132,15 @@ con.SteadyState = true;
 con.Periodic = false;
 con.Discontinuities = vec(unique([inp.discontinuities; dos.discontinuities]));
 con.Update = @update;
+con.UpdateExtra = @updateExtra;
 con.private.BasalInput = basal_input;
 [con.private.basal_u, con.private.basal_dudq, con.private.basal_d2udq2] = getU(basal_input, m.nu);
 con.private.TimeScale = time_scale;
 con.private.BasalDiscontinuities = vec(unique([basal_input.discontinuities]));
+con.Extra = extra;
+if ~isfield(con.Extra, 'ParentModelName') % Assign on 1st creation while allowing it to be overridden on UpdateExtra
+    con.Extra.ParentModelName = parentModelName;
+end
 
     function con_out = update(s, q, h)
         
@@ -144,7 +149,16 @@ con.private.BasalDiscontinuities = vec(unique([basal_input.discontinuities]));
             warning(['Steady state experiment "' name '" appears to have no basal input. This may be because this experiment was built using an older version of KroneckerBio. Inputs may not be assigned the correct values in the simulation up to steady state.'])
         end
         
-        con_out = experimentSteadyState(m, s, basal_input.Update(q), inp.Update(q), dos.Update(h), time_scale, name);
+        con_out = experimentSteadyState(m, s, basal_input.Update(q), inp.Update(q), dos.Update(h), time_scale, name, extra);
+    end
+
+    function con_out = updateExtra(newExtra)
+        fields = fieldnames(newExtra);
+        for iField = 1:length(fields)
+            field = fields{iField};
+            extra.(field) = newExtra.(field);
+        end
+        con_out = experimentSteadyState(m, s, basal_input, inp, dos, time_scale, name, extra);
     end
 
 end

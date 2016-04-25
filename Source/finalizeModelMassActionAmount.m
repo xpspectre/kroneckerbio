@@ -1056,6 +1056,7 @@ m.d2rdudk = d2rdudkHidden(m.dD2dk_rk_xx, m.dD3dk_rk_ux, m.dD4dk_rk_xu, m.dD5dk_r
 
 m.Ready = true;
 m.Update = @Update;
+m.UpdateExtra = @UpdateExtra;
 
     function mout = Update(k)
         % Copy existing model
@@ -1068,6 +1069,22 @@ m.Update = @Update;
         if m.nk >= 1
             k = num2cell(k);
             [mout.Parameters.Value] = k{:};
+        end
+        
+        % Rebuild model
+        mout = final(mout, D2UsedColumns, D2UsedSpecies1, D2UsedSpecies2, D3UsedColumns, D3UsedSpecies1, D3UsedSpecies2, D4UsedColumns, D4UsedSpecies1, D4UsedSpecies2, D5UsedColumns, D5UsedSpecies1, D5UsedSpecies2);
+    end
+
+    function mout = UpdateExtra(extra)
+        % Copy existing model
+        mout = m;
+        
+        % Apply changes
+        fields = fieldnames(extra);
+        
+        for iField = 1:length(fields)
+            field = fields{iField};
+            mout.Extra.(field) = extra.(field);
         end
         
         % Rebuild model

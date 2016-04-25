@@ -1,29 +1,29 @@
-function con = experimentInitialValue(m, s, inp, dos, name)
+function con = experimentInitialValue(m, s, inp, dos, name, extra)
 %experimentInitialValue Construct a KroneckerBio experimental conditions
 %   structure describing an initial value problem
 %
 %   con = experimentInitialValue(m, s, inp, dos, name)
 %
-%   Inputs
-%   m: [ model struct scalar ]
+% Inputs:
+%   m [ model struct scalar ]
 %       The KroneckerBio model for which these experiments will be run
-%   s: [ nonnegative vector ns ]
-%       Default = m.s
-%       The values of the seed parameters
-%   inp: [ input struct scalar | handle @(t) returns nonegative vector nu |
-%          nonnegative vector nu ]
-%       Default = m.u
-%       The definition of the input species values
-%   dos: [ dose struct scalar ]
-%       Default = doseZero(m)
-%       The definition of the dose amounts and schedule
-%   name: [ string ]
-%       Default = ''
+%   s [ nonnegative vector ns { m.s } ]
+%       The values of the seed parameters. Defaults to seed values in the
+%       model.
+%   inp [ input struct scalar | handle @(t) returns nonegative vector nu |
+%          nonnegative vector nu { m.u } ]
+%       The definition of the input species values. Defaults to the
+%       constant input values in the model.
+%   dos [ dose struct scalar { doseZero(m) } ]
+%       The definition of the dose amounts and schedule. Defaults to no
+%       dosing.
+%   name [ string { '' } ]
 %       An arbitrary name for the experiment
-
+%   extra [ struct ]
+%       Misc extra key-value pairs in a struct
 %
-%   Outputs
-%   con: [ experiment struct scalar ]
+% Outputs:
+%   con [ experiment struct scalar ]
 %       The KroneckerBio experimental conditions structure
 %
 %   For the meanings of the fields of con see "help experimentZero"
@@ -31,14 +31,17 @@ function con = experimentInitialValue(m, s, inp, dos, name)
 % (c) 2016 David R Hagen, David Flowers, & Bruce Tidor
 % This work is released under the MIT license.
 
-if nargin < 5
-    name = [];
-    if nargin < 4
-        dos = [];
-        if nargin < 3
-            inp = [];
-            if nargin < 2
-                s = [];
+if nargin < 6
+    extra = [];
+    if nargin < 5
+        name = [];
+        if nargin < 4
+            dos = [];
+            if nargin < 3
+                inp = [];
+                if nargin < 2
+                    s = [];
+                end
             end
         end
     end
@@ -84,7 +87,6 @@ assert(ischar(name), 'KroneckerBio:Experiment:name', 'name must be a string')
 % Build experiment
 con.Type = 'Experiment:InitialValue';
 con.Name = name;
-con.ParentModelName = parentModelName;
 con.nu = m.nu;
 con.ns = m.ns;
 con.nq = numel(inp.q);
@@ -104,10 +106,24 @@ con.SteadyState = false;
 con.Periodic = false;
 con.Discontinuities = vec(unique([inp.discontinuities; dos.discontinuities]));
 con.Update = @update;
+con.UpdateExtra = @updateExtra;
 con.private = [];
+con.Extra = extra;
+if ~isfield(con.Extra, 'ParentModelName') % Assign on 1st creation while allowing it to be overridden on UpdateExtra
+    con.Extra.ParentModelName = parentModelName;
+end
 
     function con_out = update(s, q, h)
-        con_out = experimentInitialValue(m, s, inp.Update(q), dos.Update(h), name);
+        con_out = experimentInitialValue(m, s, inp.Update(q), dos.Update(h), name, extra);
+    end
+
+    function con_out = updateExtra(newExtra)
+        fields = fieldnames(newExtra);
+        for iField = 1:length(fields)
+            field = fields{iField};
+            extra.(field) = newExtra.(field);
+        end
+        con_out = experimentInitialValue(m, s, inp, dos, name, extra);
     end
 
 end

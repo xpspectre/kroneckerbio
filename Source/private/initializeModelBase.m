@@ -142,5 +142,8 @@ m.d2ydxdk = @(t,x,u)(zeros(0,0));
 m.d2ydkdu = @(t,x,u)(zeros(0,0));
 m.d2ydudk = @(t,x,u)(zeros(0,0));
 
+m.Extra = [];
+
 m.Ready  = true;
 m.Update = @(k,x0,q)(InitializeModel(name));
+m.UpdateExtra = @(k,x0,q)(InitializeModel(name));

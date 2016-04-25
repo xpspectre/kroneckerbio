@@ -71,17 +71,25 @@ function con = experimentZero(m)
 %           returned is identical to the one to which Update is attached
 %           except that the parameter values have been changed and the
 %           appropriate matrices and function handles have been updated.
+%       .UpdateExtra [ handle @(extra) returns struct scalar ]
+%           This function handle allows extra fields in the con.Extra field
+%           to be modified. Otherwise similar to .Update.
 %       .private [ anything ]
 %           Some experimental conditions have extra information associated
 %           with them, which is stored here because Matlab does not like
 %           stacking structs with different fields.
+%       .Extra [ struct scalar ]
+%           Additional user-defined fields set by .UpdateExtra. Note:
+%           different from .private because .private is for fields set by
+%           special conditions while .Extra is for fields set by the user
+%           or other functions that use conditions.
 
 % (c) 2015 David R Hagen & Bruce Tidor
 % This work is released under the MIT license.
 
 % Special case of numeric inputs
 if isnumeric(m)
-    con = emptystruct(m, 'Type', 'Name', 'ParentModelName', 'nu', 'ns', 'nq', 'nh', 's', 'q', 'h', 'u', 'dudq', 'd2udq2', 'd', 'dddh', 'd2ddh2', 'inp', 'dos', 'SteadyState', 'Periodic', 'Discontinuities', 'Update', 'private');
+    con = emptystruct(m, 'Type', 'Name', 'nu', 'ns', 'nq', 'nh', 's', 'q', 'h', 'u', 'dudq', 'd2udq2', 'd', 'dddh', 'd2ddh2', 'inp', 'dos', 'SteadyState', 'Periodic', 'Discontinuities', 'Update', 'UpdateExtra', 'private', 'Extra');
     return
 end
 

@@ -22,23 +22,6 @@ legend('A','B','C')
 xlabel('Time')
 ylabel('Amount')
 
-%% Modify stuff and test
-tic
-for i = 1:1000
-    m = m.Update(rand(2,1));
-    sim1 = SimulateSystem(m, con, tF);
-end
-toc
-
-m = m.Update([1,0.5]');
-
-figure
-times = linspace(0, tF, 100);
-plot(times, sim1.x(times))
-legend('A','B','C')
-xlabel('Time')
-ylabel('Amount')
-
 %% Simulate Sensitivities
 sim2 = SimulateSensitivity(m, con, tF);
 

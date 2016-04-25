@@ -21,19 +21,6 @@ classdef ParamMapperMultiModelType < ParamMapper
            end
        end
        
-       function addCondition(this, condition)
-           assert(~isempty(condition.ParamsSpec), 'ParamMapperMultiModelType:addCondition: ParamsSpec not found');
-           assert(iscell(condition.ParamsSpec), 'ParamMapperMultiModelType:addCondition: ParamsSpec not a cell array');
-           assert(length(condition.ParamsSpec) == 4, 'ParamMapperMultiModelType:addCondition: ParamsSpec has wrong size');
-           
-           nCon = size(this.paramsShared, 1) + 1;
-           for i = 1:4
-               this.paramsShared{nCon,i} = condition.ParamsSpec{i};
-           end
-           
-           this.updateParamsMap;
-       end
-       
        function sharedIdx = isSharedParamSpec(this, UseParams)
            % Tests whether condition's UseParams matches an existing one -
            % used by addModelOnUniqueParam to determine whether a new model

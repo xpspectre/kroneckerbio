@@ -9,11 +9,25 @@ classdef (Abstract) ParamMapper < handle
     end
     
     methods (Abstract)
-        addCondition(this, condition)
         isSharedParamSpec(this, UseParams) % for addModelOnUniqueParam, useParams [ nk x 1 double vector ]
     end
     
     methods
+        
+        function addCondition(this, condition)
+            paramsSpec = condition.Extra.ParamsSpec;
+            assert(~isempty(paramsSpec), 'ParamMapperOneModelType:addCondition: ParamsSpec not found');
+            assert(iscell(paramsSpec), 'ParamMapperOneModelType:addCondition: ParamsSpec not a cell array');
+            assert(length(paramsSpec) == 4, 'ParamMapperOneModelType:addCondition: ParamsSpec has wrong size');
+            
+            nCon = size(this.paramsShared, 1) + 1;
+            for i = 1:4
+                this.paramsShared{nCon,i} = paramsSpec{i};
+            end
+            
+            this.updateParamsMap;
+        end
+        
         function Tlocal = T2Tlocal(this, T)
             % Map overall T vector to local T's in conditions
             % Inputs:

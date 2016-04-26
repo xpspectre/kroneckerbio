@@ -14,15 +14,20 @@ classdef (Abstract) ParamMapper < handle
     
     methods
         
-        function addCondition(this, condition)
-            paramsSpec = condition.Extra.ParamsSpec;
-            assert(~isempty(paramsSpec), 'ParamMapperOneModelType:addCondition: ParamsSpec not found');
-            assert(iscell(paramsSpec), 'ParamMapperOneModelType:addCondition: ParamsSpec not a cell array');
-            assert(length(paramsSpec) == 4, 'ParamMapperOneModelType:addCondition: ParamsSpec has wrong size');
+        function AddCondition(this, paramSpec)
+            % Add condition to ParamMapper
+            %
+            % Inputs:
+            %   ParamSpec [ 1 x 4 cell vector of nXi x 1 double vectors ]
+            %       Specification of which parameters to fit and how
+            %       they're shared between conditions
+            assert(~isempty(paramSpec), 'ParamMapper:AddCondition: ParamsSpec not found');
+            assert(iscell(paramSpec), 'ParamMapper:AddCondition: ParamsSpec not a cell array');
+            assert(length(paramSpec) == 4, 'ParamMapper:AddCondition: ParamsSpec has wrong size');
             
             nCon = size(this.paramsShared, 1) + 1;
             for i = 1:4
-                this.paramsShared{nCon,i} = paramsSpec{i};
+                this.paramsShared{nCon,i} = paramSpec{i};
             end
             
             this.updateParamsMap;

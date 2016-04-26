@@ -28,18 +28,8 @@ obs = observationLinearWeightedSumOfSquares(outputList, timesList, sd, 'DefaultO
 obj = obs.Objective(measurements);
 
 %% Fit
-opts = [];
-opts.RunParallelExpts = true;
-
-fit = FitObject.buildFitObject(m, con, obj, opts);
-fit.computeParallel(@computeObjectiveValue)
-
-
-fit.collectParams
-fit.updateParams([9;9])
-fit.collectParams
-
-mFit = FitObjective(m, con, obj, opts);
+% Fit only model rate parameters
+mFit = FitObjective(m, con, obj);
 
 % Plot fit results
 tF = 1;
@@ -62,4 +52,4 @@ xlabel('Time')
 ylabel('Amount')
 
 %% Linearized parameter uncertainty about optimal value
-F = ObjectiveInformation(mFit, con, obj);
+F = ObjectiveInformation(mFit, con, obj); %%TODO%% update Objective* functions

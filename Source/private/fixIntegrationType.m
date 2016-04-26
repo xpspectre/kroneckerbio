@@ -1,4 +1,4 @@
-function [continuous complex tGet] = fixIntegrationType(con, obj)
+function [continuous, complex, tGet] = fixIntegrationType(con, obj)
 %FIXINTEGRATIONTYPE Standardize continuous, complex, and tGet
 %
 %   There are two attributes of objective functions that affect how the
@@ -15,32 +15,30 @@ function [continuous complex tGet] = fixIntegrationType(con, obj)
 % This work is released under the MIT license.
 
 % Constants
-[nObj nCon nTop] = size(obj);
+[nCon, nObj] = size(obj);
 
 % Initialize
-continuous = false(nCon,nTop);
-complex = false(nCon,nTop);
-tGet = cell(nCon,nTop);
+continuous = false(nCon,1);
+complex = false(nCon,1);
+tGet = cell(nCon,1);
 
 % Loop through each objective to determine if any require special treatment
-for iTop = 1:nTop
-    for iCon = 1:nCon
+for iCon = 1:nCon
+    for iObj = 1:nObj
+        continuous(iCon) = continuous(iCon) || obj(iCon,iObj).Continuous;
+        complex(iCon) = complex(iCon) || obj(iCon,iObj).Complex;
+    end
+    
+    % Only for non-complex integrations is tGet useful
+    if ~complex(iCon)
+        discreteTimes = [];
         for iObj = 1:nObj
-            continuous(iCon,iTop) = continuous(iCon,iTop) || obj(iObj,iCon,iTop).Continuous;
-            complex(iCon,iTop) = complex(iCon,iTop) || obj(iObj,iCon,iTop).Complex;
+            discreteTimes = [discreteTimes; vec(obj(iCon,iObj).DiscreteTimes)];
         end
-        
-        % Only for non-complex integrations is tGet useful
-        if ~complex(iCon,iTop)
-            discreteTimes = [];
-            for iObj = 1:nObj
-                discreteTimes = [discreteTimes; vec(obj(iObj,iCon,iTop).DiscreteTimes)];
-            end
-            if continuous(iCon,iTop)
-                % We need the final point as well
-                discreteTimes = [discreteTimes; con(iCon).tF];
-            end
-            tGet{iCon,iTop} = unique(discreteTimes);
+        if continuous(iCon)
+            % We need the final point as well
+            discreteTimes = [discreteTimes; con(iCon).tF];
         end
+        tGet{iCon} = unique(discreteTimes);
     end
 end

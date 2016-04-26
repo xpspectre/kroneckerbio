@@ -9,13 +9,13 @@ classdef ParamMapperOneModelType < ParamMapper
    end
    
    methods
-       function this = ParamMapperOneModelType(conditions)
+       function this = ParamMapperOneModelType(ParamSpec)
            if nargin < 1
-               conditions = [];
+               ParamSpec = [];
            end
            
-           for i = 1:length(conditions)
-               this.addCondition(conditions(i));
+           for i = 1:length(ParamSpec)
+               this.AddCondition(ParamSpec{i});
            end
        end
        

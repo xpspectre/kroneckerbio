@@ -3,14 +3,12 @@
 %   datasets/objective functions, where some parameters are shared between
 %   participants and others are independent.
 
-%% Initialize fit object
-fit = FitObject('T05b_Mixed_Effects_Fit');
+%% Initialize fit options
+opts = BuildFitOpts;
 
 %% Construct equilibrium experiment A + B <-> C with seeds
 addpath([fileparts(mfilename('fullpath')) '/../Testing']);
 m = equilibrium_model;
-
-fit.addModel(m);
 
 %% Set up experimental conditions and generate some test data for multi-"participant" fitting
 tF = 1;
@@ -19,28 +17,33 @@ outputs = {'A','B','C'};
 sd = sdLinear(0.05, 0.1);
 
 nCon = 3;
+con = repmat(experimentZero(m),nCon,1);
+obj = objectiveZero([nCon,1]);
 nTimes = length(times);
 measurements = cell(nCon,1); % for plotting
 for i = 1:nCon
     
     % Create sample experimental condition and generate some test data
     ici = [1, 2, 0]'; % same ics but generateTestData will randomize measuremens
-    con = experimentInitialValue(m, ici, [], [], ['VariantCon' num2str(i)]); % modified ICs
+    con_i = experimentInitialValue(m, ici, [], [], ['VariantCon' num2str(i)]); % modified ICs
     
-    [outputsList, timesList, measurementsList] = generateTestData(m, con, times, outputs, sd);
+    [outputsList, timesList, measurementsList] = generateTestData(m, con_i, times, outputs, sd);
     measurements{i} = reshape(measurementsList, nTimes, 3);
     
     obs = observationLinearWeightedSumOfSquares(outputsList, timesList, sd, ['VariantObs' num2str(i)]);
-    obj = obs.Objective(measurementsList);
+    obj_i = obs.Objective(measurementsList);
     
-    opts = [];
-    opts.UseParams = [i;1]; % different kf, same kr
-    opts.UseSeeds = [i;i;i]; % all different seeds
-    opts.ParamLowerBound = [1e-2 1e-2];
-    opts.ParamUpperBound = [1e2  1e2];
-    opts.StartingParams = [4 4];
+    newopts = [];
+    newopts.UseParams = [i;1]; % different kf, same kr
+    newopts.UseSeeds = [i;i;i]; % all different seeds
+    newopts.ParamLowerBound = [1e-2 1e-2];
+    newopts.ParamUpperBound = [1e2  1e2];
+%     newopts.StartingParams = [4 4]; %%TODO%% implement this
     
-    fit.addFitConditionData(obj, con, opts);
+    opts = BuildFitOpts(opts, m, con_i, obj_i, newopts);
+    
+    con(i) = con_i;
+    obj(i) = obj_i;
     
 end
 
@@ -53,14 +56,15 @@ end
 % suptitle('Generated Test Data') % this function requires bioinformatics toolbox
 
 % Fit multiple objective functions and experiments
-opts = [];
 opts.Verbose = 1;
 opts.TolOptim = 1;
 opts.MaxStepSize = 1;
 opts.Normalized = false;
 opts.UseAdjoint = true;
-opts.RunParallelExpts = true;
-fitOut = FitObjective(fit, opts);
+opts.RunParallelExpts = false;
+
+[m, con, G, D] = FitObjective(m, con, obj, opts);
+% end up with 3 models in m
 
 % opts.RunParallelExpts = false;
 % G = ObjectiveValue(fit, opts);
@@ -86,7 +90,7 @@ fitOut = FitObjective(fit, opts);
 timesFine = linspace(0, tF, 100)';
 simFits = [];
 for i = 1:nCon
-    simFit = SimulateSystem(fitOut.Models(i), fitOut.Conditions(i), tF);
+    simFit = SimulateSystem(m(i), con(i), tF);
     simFits = [simFits; simFit];
 end
 

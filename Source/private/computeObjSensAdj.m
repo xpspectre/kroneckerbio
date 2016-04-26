@@ -11,7 +11,7 @@ nTs = nnz(opts.UseSeeds);
 nTq = nnz(opts.UseInputControls);
 nTh = nnz(opts.UseDoseControls);
 nT = nTk + nTs + nTq + nTh;
-paramMapper = ParamMapperOneModelType(con);
+paramMapper = ParamMapperOneModelType({opts.paramSpec}); % can feed in multipel paramSpecs for multiipel conditiosn
 nObj = size(obj,1);
 d0 = zeros(ns,1); % A fake dose of 0 to subtract out
 
@@ -47,7 +47,7 @@ end
 
 %% Integrate system
 % Do not use select methods since the solution is needed at all time
-if opts.continuous
+if opts.Continuous
     [der, jac, del] = constructObjectiveSystem();
     sol_sys = accumulateOdeFwdComp(der, jac, 0, tF, [ic; 0], con.Discontinuities, 1:nx, opts.RelTol, opts.AbsTol(1:nx+1), del, eve, fin);
 else
@@ -124,7 +124,7 @@ end
 
 %% Compute G
 % Extract continuous term
-if opts.continuous
+if opts.Continuous
     G_cont = int_sys(1).sol.y(nx+1,end);
 else
     G_cont = 0;
@@ -152,7 +152,7 @@ G = G + G_cont + G_disc;
 ic = zeros(nx+nT,1);
 
 % Integrate [lambda; D] backward in time
-sol = accumulateOdeRevSelect(der, jac, 0, tF, ic, [con.Discontinuities; discrete_times], 0, [], opts.RelTol, opts.AbsTol(nx+opts.continuous+1:nx+opts.continuous+nx+nT), del);
+sol = accumulateOdeRevSelect(der, jac, 0, tF, ic, [con.Discontinuities; discrete_times], 0, [], opts.RelTol, opts.AbsTol(nx+opts.Continuous+1:nx+opts.Continuous+nx+nT), del);
 
 %% Complete steady-state
 if con.SteadyState
@@ -163,7 +163,7 @@ if con.SteadyState
     ic = sol.y;
     
     % Integrate [lambda; D] backward in time and replace previous run
-    sol = accumulateOdeRevSelect(der, jac, 0, ssSol.xe, ic, con.private.BasalDiscontinuities, 0, [], opts.RelTol, opts.AbsTol(nx+opts.continuous+1:nx+opts.continuous+nx+nT));
+    sol = accumulateOdeRevSelect(der, jac, 0, ssSol.xe, ic, con.private.BasalDiscontinuities, 0, [], opts.RelTol, opts.AbsTol(nx+opts.Continuous+1:nx+opts.Continuous+nx+nT));
 end
 
 %% Add contributions to derivative

@@ -11,13 +11,13 @@ classdef ParamMapperMultiModelType < ParamMapper
    end
    
    methods
-       function this = ParamMapperMultiModelType(conditions)
+       function this = ParamMapperMultiModelType(ParamSpec)
            if nargin < 1
-               conditions = [];
+               ParamSpec = [];
            end
            
-           for i = 1:length(conditions)
-               this.addCondition(conditions(i));
+           for i = 1:length(ParamSpec)
+               this.AddCondition(ParamSpec{i});
            end
        end
        

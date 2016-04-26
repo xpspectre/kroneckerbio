@@ -19,16 +19,8 @@ verbose = logical(opts.Verbose);
 verbose_all = max(verbose-1,0);
 
 % Process options
-opts.UseParams        = logical(con.Extra.ParamsSpec{1});
-opts.UseSeeds         = logical(con.Extra.ParamsSpec{2});
-opts.UseInputControls = logical(con.Extra.ParamsSpec{3});
-opts.UseDoseControls  = logical(con.Extra.ParamsSpec{4});
-
-opts.continuous = any(obj(:).Continuous);
-opts.RelTol = con.Extra.RelTol;
-AbsTol = fixAbsTol(con.Extra.AbsTol, 1, opts.continuous, m.nx, 1, opts.UseAdjoint, opts.UseParams, opts.UseSeeds, {opts.UseInputControls}, {opts.UseDoseControls});
+AbsTol = fixAbsTol(opts.AbsTol, 1, opts.Continuous, m.nx, 1, opts.UseAdjoint, opts.UseParams, opts.UseSeeds, {opts.UseInputControls}, {opts.UseDoseControls});
 opts.AbsTol = AbsTol{1};
-opts.ObjWeights = [obj(:).Weight];
 
 % Constants
 nObj = length(obj);
@@ -54,7 +46,7 @@ if is(m, 'Model.Nlme')
 end
 
 % Extract continuous term
-if opts.continuous
+if opts.Continuous
     error('Continuous objective functions have not been updated')
     nx = m.nx;
     G_cont = ints.y(nx+1,end);

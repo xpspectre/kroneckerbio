@@ -785,7 +785,7 @@ end
 
 m.Ready  = true;
 m.Update = @update;
-m.UpdateExtra = @updateExtra;
+m.UpdateField = @updateField;
 
 if verbose; fprintf('done.\n'); end
 
@@ -869,15 +869,17 @@ if verbose; fprintf('done.\n'); end
         varargout{1} = m;
     end
 
-    function varargout = updateExtra(extra) % TODO: Why is this varargout?
-        % Apply changes
-        fields = fieldnames(extra);
+    function varargout = updateField(newfields)
+        fields = fieldnames(newfields);
         for iField = 1:length(fields)
             field = fields{iField};
-            m.Extra.(field) = extra.(field);
+            if ~isfield(m, field)
+                warning('KroneckerBio:finalizeModelAnalytic:updateField:InvalidField', 'Attempting to add field %s, which is not present in the model. This will disable concatenating models.', field)
+            end
+            m.(field) = newfields.(field);
         end
         
-        m.UpdateExtra = @updateExtra;
+        m.UpdateField = @updateField;
         
         varargout{1} = m;
     end

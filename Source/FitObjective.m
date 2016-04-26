@@ -264,6 +264,11 @@ end
 % Update parameter sets
 fit.updateParams(Tbest);
 
+% Copy over the final model+condition+objfun from parallel works back to main
+if opts.RunParallelExpts %%TODO%%
+    warning('returned results not updated with parallel results')
+end
+
 % Output according to input signature
 switch nargin
     case 1
@@ -314,6 +319,7 @@ end
         if nargout == 2
             [G, D] = fit.computeObjective;
         end
+        fit.collectParams
         
     end
 

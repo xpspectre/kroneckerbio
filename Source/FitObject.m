@@ -41,6 +41,10 @@ classdef FitObject < handle
        modelClassMap = [] % nObjectives x 1 double matrix of model class index each objective belongs to
        paramMapper % ParamMapper object that holds local condition <-> global fit parameter mapping
        nT
+       initializedWrappers = false;
+       componentWrappers
+%        localWrappers
+       nw
    end
    
    methods
@@ -106,6 +110,15 @@ classdef FitObject < handle
            %            n-th order calculation. Example: NLME requires 1st order
            %            sensitivities (gradient) for the objective function calculation and
            %            2nd order sensitivities (Hessian) for fitting.
+           %        .RunParallelExpts [ true | {false} | scalar positive integer ]
+           %            Whether to run experiments in parallel. If true,
+           %            initializes a parallel pool using max number of threads
+           %            available, or if a scalar positive integer is specified,
+           %            using that many threads up to the max number of threads
+           %            available. Running experiments in parallel is useful
+           %            when the fit needs to integrate many
+           %            covariates/experimental conditions/patients for each
+           %            step of the optimization.
            %        .GlobalOptimization [ logical scalar {false} ]
            %           Use global optimization in addition to fmincon
            %        .GlobalOpts [ options struct scalar {} ]
@@ -144,6 +157,8 @@ classdef FitObject < handle
            opts_.MaxFunEvals      = 5000;
            
            opts_.ComputeSensPlusOne = false;
+           
+           opts_.RunParallelExpts = false;
            
            opts_.Method           = 'fmincon';
            
@@ -730,6 +745,86 @@ classdef FitObject < handle
        end
        
        %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+       % Extra optimizer initialization for parallel expt simulation
+       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+       function initializeParallelExpts(this)
+%            usePar = this.options.RunParallelExpts;
+%            if ~usePar % nonzero integers are true
+%                warning('FitObject:initializeParallelExpts:NotParallel', 'Running expts in parallel not speified. Ignoring.')
+%                return
+%            end
+%            
+%            % Set up parallel pool
+%            maxCores = feature('numcores');
+%            if islogical(usePar)
+%                this.nw = maxCores;
+%            elseif isnumeric(usePar)
+%                this.nw = min(usePar, maxCores);
+%            else
+%                error('FitObject:initializeParallelExpts:InvalidOpt', 'RunParallelExpts must be true or a number of threads.')
+%            end
+%            pool = gcp('nocreate'); % if no pool, do not create new one.
+%            if isempty(pool)
+%                parpool('local', this.nw);
+%            end
+           
+           componentMaps = splitComponentMap(this.componentMap, this.nw);
+%            this.componentWrappers = cell(this.nw,1);
+%            for i = 1:this.nw
+%                this.componentWrappers{i} = WorkerObjWrapper(@getComponentChunks, {componentMaps{i}, this.Models, this.Conditions, this.Objectives});
+%            end
+           % Debugging: view the wrappers locally
+%            this.localWrappers = cell(this.nw,1);
+%            for i = 1:this.nw
+%                this.localWrappers{i} = getComponentChunks(componentMaps{i}, this.Models, this.Conditions, this.Objectives);
+%            end
+            
+           
+       end
+       
+       function computeParallel(this, fun)
+           % Contains the only SPMD blocks
+           
+           % Initialize if not done yet
+           if ~this.initializedWrappers
+               usePar = this.options.RunParallelExpts;
+               if ~usePar % nonzero integers are true
+                   warning('FitObject:initializeParallelExpts:NotParallel', 'Running expts in parallel not speified. Ignoring.')
+                   return
+               end
+               
+               % Set up parallel pool
+               maxCores = feature('numcores');
+               if islogical(usePar)
+                   this.nw = maxCores;
+               elseif isnumeric(usePar)
+                   this.nw = min(usePar, maxCores);
+               else
+                   error('FitObject:initializeParallelExpts:InvalidOpt', 'RunParallelExpts must be true or a number of threads.')
+               end
+               pool = gcp('nocreate'); % if no pool, do not create new one.
+               if isempty(pool)
+                   parpool('local', this.nw);
+               end
+               
+               componentMaps = splitComponentMap(this.componentMap, this.nw);
+               spmd
+                   components = getComponentChunks(componentMaps{labindex}, this.Models, this.Conditions, this.Objectives);
+               end
+               
+               this.initializedWrappers = true;
+           end
+           
+           spmd
+               components.nConditions
+               components.componentMap
+               
+               Gs = fun(components, this.options)
+           end
+           
+       end
+       
+       %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
        % Called inside optimizer's loop
        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
        function [G, D, H] = computeObjective(this, conditions)
@@ -739,7 +834,9 @@ classdef FitObject < handle
            % Inputs:
            %    conditions [ double vector {1:this.nConditions} ]
            %        Indices of conditions to compute quantities for.
-           %        Default is to compute using all conditions.
+           %        Default is to compute using all conditions. When using
+           %        RunParallelExpts, all conditions are always calculated.
+           %        TODO: make this work for parallel expts too.
            %
            % Outputs:
            %    G [ double scalar ]
@@ -768,16 +865,37 @@ classdef FitObject < handle
            
            if nargout == 1 % objective function value
                
-               Gs = zeros(this.nConditions,1);
-               for i = 1:nCon
-                   iCon = conditions(i);
-                   modelIdx = this.Conditions(iCon).Extra.ParentModelIdx;
-                   objectives = this.Objectives(this.componentMap(:,2) == iCon)';
-                   
-                   if this.options.ComputeSensPlusOne
-                       Gs(i) = computeObjGrad(this.Models(modelIdx), this.Conditions(iCon), objectives, this.options);
-                   else
-                       Gs(i) = computeObj(this.Models(modelIdx), this.Conditions(iCon), objectives, this.options);
+               if this.options.RunParallelExpts;
+                   if ~this.initializedWrappers; this.initializeParallelExpts; this.initializedWrappers = true; end
+                   spmd % Run the experiments in each chunk
+                       components = this.componentWrappers{labindex}.Value;
+                       nCon = components.nConditions;
+                       
+                       Gs_ = zeros(nCon,1);
+                       for i = 1:nCon
+                           modelIdx = components.Conditions(i).Extra.ParentModelIdx;
+                           objectives = components.Objectives(components.componentMap(:,2) == i)';
+                           
+                           if this.options.ComputeSensPlusOne
+                               Gs_(i) = computeObjGrad(components.Models(modelIdx), components.Conditions(i), objectives, this.options);
+                           else
+                               Gs_(i) = computeObj(components.Models(modelIdx), components.Conditions(i), objectives, this.options);
+                           end
+                       end
+                   end
+                   Gs = joinList(gather(Gs_));
+               else
+                   Gs = zeros(nCon,1);
+                   for i = 1:nCon
+                       iCon = conditions(i);
+                       modelIdx = this.Conditions(iCon).Extra.ParentModelIdx;
+                       objectives = this.Objectives(this.componentMap(:,2) == iCon)';
+                       
+                       if this.options.ComputeSensPlusOne
+                           Gs(i) = computeObjGrad(this.Models(modelIdx), this.Conditions(iCon), objectives, this.options);
+                       else
+                           Gs(i) = computeObj(this.Models(modelIdx), this.Conditions(iCon), objectives, this.options);
+                       end
                    end
                end
                G = sum(Gs);
@@ -786,21 +904,41 @@ classdef FitObject < handle
            
            if nargout == 2 % gradient
                
-               Gs = zeros(nCon,1);
-               Ds = cell(nCon,1);
-               for i = 1:nCon
-                   iCon = conditions(i);
-                   modelIdx = this.Conditions(iCon).Extra.ParentModelIdx;
-                   objectives = this.Objectives(this.componentMap(:,2) == iCon)';
-                   
-                   if this.options.ComputeSensPlusOne
-                       [Gi, Di] = computeObjHess(this.Models(modelIdx), this.Conditions(iCon), objectives, this.options);
-                   else
-                       [Gi, Di] = computeObjGrad(this.Models(modelIdx), this.Conditions(iCon), objectives, this.options);
+               if this.options.RunParallelExpts;
+                   if ~this.initializedWrappers; this.initializeParallelExpts; this.initializedWrappers = true; end
+                   spmd % Run the experiments in each chunk
+                       components = this.componentWrappers{labindex}.Value;
+                       nCon = components.nConditions;
+                       
+                       Gs_ = zeros(nCon,1);
+                       Ds_ = cell(nCon,1);
+                       for i = 1:nCon
+                           modelIdx = components.Conditions(i).Extra.ParentModelIdx;
+                           objectives = components.Objectives(components.componentMap(:,2) == i)';
+                           
+                           if this.options.ComputeSensPlusOne
+                               [Gs_(i), Ds_(i)] = computeObjHess(components.Models(modelIdx), components.Conditions(i), objectives, this.options);
+                           else
+                               [Gs_(i), Ds_(i)] = computeObjGrad(components.Models(modelIdx), components.Conditions(i), objectives, this.options);
+                           end
+                       end
                    end
-                   
-                   Gs(i) = Gi;
-                   Ds(i) = Di;
+                   Gs = joinList(gather(Gs_));
+                   Ds = joinList(gather(Ds_));
+               else
+                   Gs = zeros(nCon,1);
+                   Ds = cell(nCon,1);
+                   for i = 1:nCon
+                       iCon = conditions(i);
+                       modelIdx = this.Conditions(iCon).Extra.ParentModelIdx;
+                       objectives = this.Objectives(this.componentMap(:,2) == iCon)';
+                       
+                       if this.options.ComputeSensPlusOne
+                           [Gs(i), Ds(i)] = computeObjHess(this.Models(modelIdx), this.Conditions(iCon), objectives, this.options);
+                       else
+                           [Gs(i), Ds(i)] = computeObjGrad(this.Models(modelIdx), this.Conditions(iCon), objectives, this.options);
+                       end
+                   end
                end
                G = sum(Gs);
                D = this.paramMapper.Tlocal2T(Ds, 'sum');
@@ -809,23 +947,44 @@ classdef FitObject < handle
            
            if nargout == 3 % Hessian, normally not called during fitting
                
-               Gs = zeros(nCon,1);
-               Ds = cell(nCon,1);
-               Hs = cell(nCon,1);
-               for i = 1:nCon
-                   iCon = conditions(i);
-                   modelIdx = this.Conditions(iCon).Extra.ParentModelIdx;
-                   objectives = this.Objectives(this.componentMap(:,2) == iCon)';
-                   
-                   if this.options.ComputeSensPlusOne
-                       error('FitObject:computeObjective:tooHighSensOrder', 'ComputeSensPlusOne = true was specified for an obective Hessian calculation and 3rd order sensitivities are not implemented.')
-                   else
-                       [Gi, Di, Hi] = computeObjHess(this.Models(modelIdx), this.Conditions(iCon), objectives, this.options);
+               if this.options.RunParallelExpts;
+                   if ~this.initializedWrappers; this.initializeParallelExpts; this.initializedWrappers = true; end
+                   spmd % Run the experiments in each chunk
+                       components = this.componentWrappers{labindex}.Value;
+                       nCon = components.nConditions;
+                       
+                       Gs_ = zeros(nCon,1);
+                       Ds_ = cell(nCon,1);
+                       Hs_ = cell(nCon,1);
+                       for i = 1:nCon
+                           modelIdx = components.Conditions(i).Extra.ParentModelIdx;
+                           objectives = components.Objectives(components.componentMap(:,2) == i)';
+                           
+                           if this.options.ComputeSensPlusOne
+                               error('FitObject:computeObjective:tooHighSensOrder', 'ComputeSensPlusOne = true was specified for an obective Hessian calculation and 3rd order sensitivities are not implemented.')
+                           else
+                               [Gs_(i), Ds_(i), Hs_(i)] = computeObjHess(components.Models(modelIdx), components.Conditions(i), objectives, this.options);
+                           end
+                       end
                    end
-                   
-                   Gs(i) = Gi;
-                   Ds(i) = Di;
-                   Hs(i) = Hi;
+                   Gs = joinList(gather(Gs_));
+                   Ds = joinList(gather(Ds_));
+                   Hs = joinList(gather(Hs_));
+               else
+                   Gs = zeros(nCon,1);
+                   Ds = cell(nCon,1);
+                   Hs = cell(nCon,1);
+                   for i = 1:nCon
+                       iCon = conditions(i);
+                       modelIdx = this.Conditions(iCon).Extra.ParentModelIdx;
+                       objectives = this.Objectives(this.componentMap(:,2) == iCon)';
+                       
+                       if this.options.ComputeSensPlusOne
+                           error('FitObject:computeObjective:tooHighSensOrder', 'ComputeSensPlusOne = true was specified for an obective Hessian calculation and 3rd order sensitivities are not implemented.')
+                       else
+                           [Gs(i), Ds(i), Hs(i)] = computeObjHess(this.Models(modelIdx), this.Conditions(iCon), objectives, this.options);
+                       end
+                   end
                end
                G = sum(Gs);
                D = this.paramMapper.Tlocal2T(Ds, 'sum');
@@ -845,7 +1004,7 @@ classdef FitObject < handle
            %        Optional sensitivity solution struct(s) from
            %        integrateAllSens if you don't want to recalculate them
            %        in this function. The number and ordering of structs
-           %        must match those in this FitObject
+           %        must match those in this FitObject. 
            %
            % Outputs:
            %   F [ double matrix ]
@@ -864,19 +1023,39 @@ classdef FitObject < handle
                dxdTSol = cell(nCon,1);
            end
            
-           Fs = cell(nCon,1);
-           for i = 1:nCon
-               modelIdx = this.Conditions(i).Extra.ParentModelIdx;
-               objectives = this.Objectives(this.componentMap(:,2) == i)';
+           if this.options.RunParallelExpts;
+               if ~this.initializedWrappers; this.initializeParallelExpts; this.initializedWrappers = true; end
+               dxdTSolChunks = splitList(dxdTSol, this.nw); % Divide up dxdTSol if provided, cell array of cell arrays
                
-               Fi = computeObjInfo(this.Models(modelIdx), this.Conditions(i), objectives, this.options, dxdTSol{i});
+               spmd % Run the experiments in each chunk
+                   components = this.componentWrappers{labindex}.Value;
+                   nCon = components.nConditions;
+                   dxdTSols = dxdTSolChunks{labindex};
+                   
+                   Fs_ = cell(nCon,1);
+                   for i = 1:nCon
+                       modelIdx = components.Conditions(i).Extra.ParentModelIdx;
+                       objectives = components.Objectives(components.componentMap(:,2) == i)';
+                       
+                       Fs_(i) = computeObjInfo(components.Models(modelIdx), components.Conditions(i), objectives, this.options, dxdTSols{i});
+                   end
+               end
+               Fs = joinList(gather(Fs_));
+           else
                
-               Fs(i) = Fi;
+               Fs = cell(nCon,1);
+               for i = 1:nCon
+                   modelIdx = this.Conditions(i).Extra.ParentModelIdx;
+                   objectives = this.Objectives(this.componentMap(:,2) == i)';
+                   
+                   Fs(i) = computeObjInfo(this.Models(modelIdx), this.Conditions(i), objectives, this.options, dxdTSol{i});
+               end
            end
            F = this.paramMapper.Tlocal2T(Fs, 'sum');
            
            % Return all individual condition FIMs
            if nargout == 2
+               nCon = this.nConditions; % get this again if turned into a Composite object inside spmd
                All = cell(nCon,1);
                for i = 1:nCon
                    All{i} = this.paramMapper.Tlocal2T(Fs(i), 'sum');
@@ -897,14 +1076,31 @@ classdef FitObject < handle
            %        model (for k) or experiment (for s,q,h) it came from
            
            % Put params in same format as param mapper
-           Tlocals = cell(this.nConditions,1);
-           for i = 1:this.nConditions
-               parentModelIdx = this.Conditions(i).Extra.ParentModelIdx;
-               Tlocal = {this.Models(parentModelIdx).k; ...
-                   this.Conditions(i).s; ...
-                   this.Conditions(i).q; ...
-                   this.Conditions(i).h};
-               Tlocals{i} = Tlocal;
+           if this.options.RunParallelExpts;
+               if ~this.initializedWrappers; this.initializeParallelExpts; this.initializedWrappers = true; end
+               spmd
+                   components = this.componentWrappers{labindex}.Value;
+                   nCon = components.nConditions;
+                   Tlocals_ = cell(nCon,1);
+                   for i = 1:nCon
+                       parentModelIdx = components.Conditions(i).Extra.ParentModelIdx;
+                       Tlocals_{i} = {components.Models(parentModelIdx).k; ...
+                           components.Conditions(i).s; ...
+                           components.Conditions(i).q; ...
+                           components.Conditions(i).h};
+                   end
+               end
+               Tlocals = joinList(gather(Tlocals_));
+           else
+               nCon = this.nConditions;
+               Tlocals = cell(nCon,1);
+               for i = 1:nCon
+                   parentModelIdx = this.Conditions(i).Extra.ParentModelIdx;
+                   Tlocals{i} = {this.Models(parentModelIdx).k; ...
+                       this.Conditions(i).s; ...
+                       this.Conditions(i).q; ...
+                       this.Conditions(i).h};
+               end
            end
            [T, details_] = this.paramMapper.Tlocal2T(Tlocals);
            
@@ -952,16 +1148,39 @@ classdef FitObject < handle
            Tlocals = this.paramMapper.T2Tlocal(T);
            
            % Update conditions with Tlocals
-           for i = 1:this.nConditions
-               parentModelIdx = this.Conditions(i).Extra.ParentModelIdx;
+           if this.options.RunParallelExpts;
+               if ~this.initializedWrappers; this.initializeParallelExpts; this.initializedWrappers = true; end
+               TlocalsChunks = splitList(Tlocals, this.nw);
                
-               % Paste updated param values over old values containing params not fit
-               Tlocalold = {this.Models(parentModelIdx).k, this.Conditions(i).s, this.Conditions(i).q, this.Conditions(i).h};
-               Tlocal = combineCellMats(Tlocalold, Tlocals{i});
-               [k,s,q,h] = deal(Tlocal{:});
-               
-               this.Models(parentModelIdx) = this.Models(parentModelIdx).Update(k);
-               this.Conditions(i) = this.Conditions(i).Update(s, q, h);
+               spmd
+                   components = this.componentWrappers{labindex}.Value;
+                   Tlocals = TlocalsChunks{labindex};
+                   
+                   for i = 1:components.nConditions
+                       parentModelIdx = components.Conditions(i).Extra.ParentModelIdx;
+                       
+                       % Paste updated param values over old values containing params not fit
+                       Tlocalold = {components.Models(parentModelIdx).k, components.Conditions(i).s, components.Conditions(i).q, components.Conditions(i).h};
+                       Tlocal = combineCellMats(Tlocalold, Tlocals{i});
+                       [k,s,q,h] = deal(Tlocal{:});
+                       
+                       components.Models(parentModelIdx) = components.Models(parentModelIdx).Update(k);
+                       components.Conditions(i) = components.Conditions(i).Update(s, q, h);
+                       this.componentWrappers{labindex}.Value = components; %%TODO%% Doesn't work - read only
+                   end
+               end
+           else
+               for i = 1:this.nConditions
+                   parentModelIdx = this.Conditions(i).Extra.ParentModelIdx;
+                   
+                   % Paste updated param values over old values containing params not fit
+                   Tlocalold = {this.Models(parentModelIdx).k, this.Conditions(i).s, this.Conditions(i).q, this.Conditions(i).h};
+                   Tlocal = combineCellMats(Tlocalold, Tlocals{i});
+                   [k,s,q,h] = deal(Tlocal{:});
+                   
+                   this.Models(parentModelIdx) = this.Models(parentModelIdx).Update(k);
+                   this.Conditions(i) = this.Conditions(i).Update(s, q, h);
+               end
            end
        end
        
@@ -992,30 +1211,14 @@ classdef FitObject < handle
            % Update fit object fields when model is added
            % Uses the model.Extra.DummyName field if present, reflecting an
            %    automatically added model
-           nModels_ = length(this.Models);
-           this.nModels = nModels_;
-           
-           modelNames_ = cell(nModels_,1);
-           for i = 1:nModels_
-               if isfield(this.Models(i).Extra, 'DummyName')
-                   modelNames_{i} = this.Models(i).Extra.DummyName;
-               else
-                   modelNames_{i} = this.Models(i).Name;
-               end
-           end
-           this.modelNames = modelNames_;
+           this.nModels = length(this.Models);
+           this.modelNames = getModelNames(this.Models);
        end
        
        function updateConditions(this)
            % Update fit object fields when condition is added
-           nConditions_ = length(this.Conditions);
-           this.nConditions = nConditions_;
-           
-           conditionNames_ = cell(nConditions_,1);
-           for i = 1:nConditions_
-               conditionNames_{i} = this.Conditions(i).Name;
-           end
-           this.conditionNames = conditionNames_;
+           this.nConditions = length(this.Conditions);
+           this.conditionNames = getConditionNames(this.Conditions);
        end
        
        function updateObjectives(this)
@@ -1031,27 +1234,13 @@ classdef FitObject < handle
            this.objectiveNames = objectiveNames_;
            
            % Update component map
-           this.updateComponentMap;
+           this.componentMap = buildComponentMap(this.Models, this.Conditions, this.Objectives);
            
            % Update mapping of objectives to their base model classes
            this.updateModelClassMap;
            
            % Update condition <-> fit parameters mapping
            this.updateParamMapper;
-       end
-       
-       function updateComponentMap(this)
-           % Update models < conditions < objectives componentMap which represents the
-           % tree as a matrix
-           componentMap_ = zeros(this.nObjectives, 3);
-           for i = 1:this.nObjectives
-               conditionName = this.Objectives(i).ParentConditionName;
-               conditionIdx = find(ismember(this.conditionNames, conditionName));
-               modelName = this.Conditions(conditionIdx).Extra.ParentModelName;
-               modelIdx = find(ismember(this.modelNames, modelName));
-               componentMap_(i,:) = [modelIdx, conditionIdx, i];
-           end
-           this.componentMap = componentMap_;
        end
        
        function updateModelClassMap(this)
@@ -1322,4 +1511,63 @@ switch nParams
     otherwise
         error('FitObject:fixParamsSpec: Number of params specs %d not equal to number params %d', nParams, n)
 end
+end
+
+function modelNames = getModelNames(Models)
+% Gets model names, using m.Extra.DummyName if present
+nModels = length(Models);
+modelNames = cell(nModels,1);
+for i = 1:nModels
+    if isfield(Models(i).Extra, 'DummyName')
+        modelNames{i} = Models(i).Extra.DummyName;
+    else
+        modelNames{i} = Models(i).Name;
+    end
+end
+end
+
+function parentModelIdx = getParentModelIdx(Condition, Models)
+parentModelName = Condition.Extra.ParentModelName;
+modelNames = getModelNames(Models);
+parentModelIdx = find(ismember(modelNames, parentModelName));
+assert(numel(parentModelIdx) == 1, 'FitObject:getParentModelIdx:MultipleParentModelsFound', 'Multiple parent models were found for Condition based on ParentModelName')
+end
+
+function conditionNames = getConditionNames(Conditions)
+% Gets condition names
+nConditions = length(Conditions);
+conditionNames = cell(nConditions,1);
+for i = 1:nConditions
+    conditionNames{i} = Conditions(i).Name;
+end
+end
+
+function componentMap = buildComponentMap(Models, Conditions, Objectives)
+% Build models < conditions < objectives componentMap which represents the
+%   tree as a matrix
+nObjectives = length(Objectives);
+conditionNames = getConditionNames(Conditions);
+modelNames = getModelNames(Models);
+componentMap = zeros(nObjectives, 3);
+for i = 1:nObjectives
+    conditionName = Objectives(i).ParentConditionName;
+    conditionIdx = find(ismember(conditionNames, conditionName));
+    modelName = Conditions(conditionIdx).Extra.ParentModelName;
+    modelIdx = find(ismember(modelNames, modelName));
+    componentMap(i,:) = [modelIdx, conditionIdx, i];
+end
+end
+
+function components = getComponentChunks(componentMap, Models, Conditions, Objectives)
+% Returns self-contained struct of components for use with WorkerObjWrapper
+% COW for Models, Components, and Objectives means this should be fast
+components = [];
+components.nConditions = size(componentMap,1);
+components.Models = Models(componentMap(:,1));
+components.Conditions = Conditions(componentMap(:,2));
+for i = 1:components.nConditions % Reassign Condition ParentModelIdx to point to the proper Model position
+    components.Conditions(i) = components.Conditions(i).UpdateExtra(struct('ParentModelIdx', getParentModelIdx(components.Conditions(i), components.Models)));
+end
+components.Objectives = Objectives(componentMap(:,3));
+components.componentMap = buildComponentMap(components.Models, components.Conditions, components.Objectives);
 end

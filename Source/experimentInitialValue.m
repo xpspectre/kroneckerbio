@@ -1,4 +1,4 @@
-function con = experimentInitialValue(m, s, inp, dos, name, extra)
+function con = experimentInitialValue(m, s, inp, dos, name)
 %experimentInitialValue Construct a KroneckerBio experimental conditions
 %   structure describing an initial value problem
 %
@@ -19,8 +19,6 @@ function con = experimentInitialValue(m, s, inp, dos, name, extra)
 %       dosing.
 %   name [ string { '' } ]
 %       An arbitrary name for the experiment
-%   extra [ struct ]
-%       Misc extra key-value pairs in a struct
 %
 % Outputs:
 %   con [ experiment struct scalar ]
@@ -31,17 +29,14 @@ function con = experimentInitialValue(m, s, inp, dos, name, extra)
 % (c) 2016 David R Hagen, David Flowers, & Bruce Tidor
 % This work is released under the MIT license.
 
-if nargin < 6
-    extra = [];
-    if nargin < 5
-        name = [];
-        if nargin < 4
-            dos = [];
-            if nargin < 3
-                inp = [];
-                if nargin < 2
-                    s = [];
-                end
+if nargin < 5
+    name = [];
+    if nargin < 4
+        dos = [];
+        if nargin < 3
+            inp = [];
+            if nargin < 2
+                s = [];
             end
         end
     end
@@ -63,8 +58,6 @@ end
 % m
 assert(isscalar(m) && is(m, 'Model'), 'KroneckerBio:Experiment:m', 'm must be a Model')
 m = keepfields(m, {'Type', 'Name', 's', 'u', 'ns', 'nu'});
-nu = m.nu;
-parentModelName = m.Name;
 
 % s
 assert(numel(s) == m.ns, 'KroneckerBio:Experiment:s', 's must a vector with length equal to m.ns')
@@ -106,24 +99,10 @@ con.SteadyState = false;
 con.Periodic = false;
 con.Discontinuities = vec(unique([inp.discontinuities; dos.discontinuities]));
 con.Update = @update;
-con.UpdateExtra = @updateExtra;
 con.private = [];
-con.Extra = extra;
-if ~isfield(con.Extra, 'ParentModelName') % Assign on 1st creation while allowing it to be overridden on UpdateExtra
-    con.Extra.ParentModelName = parentModelName;
-end
 
     function con_out = update(s, q, h)
-        con_out = experimentInitialValue(m, s, inp.Update(q), dos.Update(h), name, extra);
-    end
-
-    function con_out = updateExtra(newExtra)
-        fields = fieldnames(newExtra);
-        for iField = 1:length(fields)
-            field = fields{iField};
-            extra.(field) = newExtra.(field);
-        end
-        con_out = experimentInitialValue(m, s, inp, dos, name, extra);
+        con_out = experimentInitialValue(m, s, inp.Update(q), dos.Update(h), name);
     end
 
 end

@@ -10,6 +10,7 @@ addpath([kroneckerPath '/External']);
 addpath([kroneckerPath '/External/ode15sf']);
 addpath([kroneckerPath '/External/libSBML-5.11.4-matlab']);
 addpath([kroneckerPath '/External/tprod']);
+addpath([kroneckerPath '/External/WorkerObjWrapper']);
 
 % Compatibility paths
 % Add our version if Matlab version does not exist

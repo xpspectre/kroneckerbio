@@ -175,3 +175,21 @@ end
 teststruct = pastestruct(extra, teststruct); % just look for fields matching extra
 a.verifyEqual(teststruct, extra);
 end
+
+function testSplitComponentMap(a)
+cmap = [1,1,1;2,2,2;3,3,3]; % more workers than conditions
+cmaps = splitComponentMap(cmap,6);
+a.assertEqual(cmaps, {[1,1,1],[2,2,2],[3,3,3],zeros(0,3),zeros(0,3),zeros(0,3)}');
+
+cmap = [1,1,1;2,2,2;3,3,3]; % more conditions than workers
+cmaps = splitComponentMap(cmap,2);
+a.assertEqual(cmaps, {[1,1,1;2,2,2],[3,3,3]}');
+
+cmap = [1,1,1;2,2,2;3,3,3;3,3,4;3,3,5]; % multiple objectives per condition with more workers than conditions
+cmaps = splitComponentMap(cmap,6);
+a.assertEqual(cmaps, {[1,1,1],[2,2,2],[3,3,3;3,3,4;3,3,5],zeros(0,3),zeros(0,3),zeros(0,3)}');
+
+cmap = [1,1,1;2,2,2;3,3,3;3,3,4;3,3,5]; % multiple objectives per condition with more conditions than workers
+cmaps = splitComponentMap(cmap,2);
+a.assertEqual(cmaps, {[1,1,1;2,2,2],[3,3,3;3,3,4;3,3,5]}');
+end

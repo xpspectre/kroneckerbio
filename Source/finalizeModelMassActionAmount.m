@@ -1056,7 +1056,7 @@ m.d2rdudk = d2rdudkHidden(m.dD2dk_rk_xx, m.dD3dk_rk_ux, m.dD4dk_rk_xu, m.dD5dk_r
 
 m.Ready = true;
 m.Update = @Update;
-m.UpdateExtra = @UpdateExtra;
+m.UpdateField= @UpdateField;
 
     function mout = Update(k)
         % Copy existing model
@@ -1075,16 +1075,19 @@ m.UpdateExtra = @UpdateExtra;
         mout = final(mout, D2UsedColumns, D2UsedSpecies1, D2UsedSpecies2, D3UsedColumns, D3UsedSpecies1, D3UsedSpecies2, D4UsedColumns, D4UsedSpecies1, D4UsedSpecies2, D5UsedColumns, D5UsedSpecies1, D5UsedSpecies2);
     end
 
-    function mout = UpdateExtra(extra)
+    function mout = UpdateField(newfields)
         % Copy existing model
         mout = m;
         
         % Apply changes
-        fields = fieldnames(extra);
+        fields = fieldnames(newfields);
         
         for iField = 1:length(fields)
             field = fields{iField};
-            mout.Extra.(field) = extra.(field);
+            if ~isfield(m, field)
+                warning('KroneckerBio:finalizeModelMassActionAmount:UpdateField:InvalidField', 'Attempting to add field %s, which is not present in the model. This will disable concatenating models.', field)
+            end
+            mout.(field) = newfields.(field);
         end
         
         % Rebuild model

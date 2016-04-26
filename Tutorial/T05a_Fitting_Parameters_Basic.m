@@ -28,7 +28,18 @@ obs = observationLinearWeightedSumOfSquares(outputList, timesList, sd, 'DefaultO
 obj = obs.Objective(measurements);
 
 %% Fit
-mFit = FitObjective(m, con, obj);
+opts = [];
+opts.RunParallelExpts = true;
+
+fit = FitObject.buildFitObject(m, con, obj, opts);
+fit.computeParallel(@computeObjectiveValue)
+
+
+fit.collectParams
+fit.updateParams([9;9])
+fit.collectParams
+
+mFit = FitObjective(m, con, obj, opts);
 
 % Plot fit results
 tF = 1;

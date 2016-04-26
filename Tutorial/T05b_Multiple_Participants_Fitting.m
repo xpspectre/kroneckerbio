@@ -45,21 +45,42 @@ for i = 1:nCon
 end
 
 % Plot test data
-figure
-for i = 1:nCon
-    subplot(1, nCon, i)
-    plot(times, measurements{i})
-end
-suptitle('Generated Test Data') % this function requires bioinformatics toolbox
+% figure
+% for i = 1:nCon
+%     subplot(1, nCon, i)
+%     plot(times, measurements{i})
+% end
+% suptitle('Generated Test Data') % this function requires bioinformatics toolbox
 
 % Fit multiple objective functions and experiments
 opts = [];
-opts.Verbose = 2;
+opts.Verbose = 1;
 opts.TolOptim = 1;
 opts.MaxStepSize = 1;
 opts.Normalized = false;
 opts.UseAdjoint = true;
+opts.RunParallelExpts = true;
 fitOut = FitObjective(fit, opts);
+
+% opts.RunParallelExpts = false;
+% G = ObjectiveValue(fit, opts);
+% opts.RunParallelExpts = true;
+% G_ = ObjectiveValue(fit, opts);
+
+% opts.RunParallelExpts = false;
+% [D, G] = ObjectiveGradient(fit, opts);
+% opts.RunParallelExpts = true;
+% [D_, G_] = ObjectiveGradient(fit, opts);
+
+% opts.RunParallelExpts = false;
+% [H, D, G] = ObjectiveHessian(fit, opts);
+% opts.RunParallelExpts = true;
+% [H_, D_, G_] = ObjectiveHessian(fit, opts);
+
+% opts.RunParallelExpts = false;
+% [F, FAll] = ObjectiveInformation(fit, opts);
+% opts.RunParallelExpts = true;
+% [F_, FAll_] = ObjectiveInformation(fit, opts);
 
 %% Display fit results
 timesFine = linspace(0, tF, 100)';

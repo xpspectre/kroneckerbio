@@ -38,7 +38,7 @@ for i = 1:nCon
     newopts.UseSeeds = [i;i;i]; % all different seeds
     newopts.ParamLowerBound = [1e-2 1e-2];
     newopts.ParamUpperBound = [1e2  1e2];
-%     newopts.StartingParams = [4 4]; %%TODO%% implement this
+    newopts.StartingParams = [4 4];
     
     opts = BuildFitOpts(opts, m, con_i, obj_i, newopts);
     

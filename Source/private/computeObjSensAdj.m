@@ -11,7 +11,7 @@ nTs = nnz(opts.UseSeeds);
 nTq = nnz(opts.UseInputControls);
 nTh = nnz(opts.UseDoseControls);
 nT = nTk + nTs + nTq + nTh;
-paramMapper = ParamMapperOneModelType({opts.paramSpec}); % can feed in multipel paramSpecs for multiipel conditiosn
+paramMapper = ParamMapperOneModelType({opts.paramSpec});
 nObj = size(obj,1);
 d0 = zeros(ns,1); % A fake dose of 0 to subtract out
 

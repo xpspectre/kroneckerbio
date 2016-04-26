@@ -51,70 +51,57 @@ a.verifyEqual(D, Dnew, 'RelTol', 1e-4)
 end
 
 function testMakeMultiConditionFit(a)
-opts = [];
+opts = BuildFitOpts;
 opts.Verbose = 0;
-fit = FitObject('UT10_MultiConditionFit', opts);
 
 m = equilibrium_model;
-fit.addModel(m);
 
 times = linspace(0, 1, 5)';
 outputs = {'A','B','C'};
 sd = sdLinear(0.05, 0.1);
 
 nCon = 3;
+con = repmat(experimentZero(m),nCon,1);
+obj = objectiveZero([nCon,1]);
 for i = 1:nCon
-    con = experimentInitialValue(m, [1,2,0]', [], [], ['Con' num2str(i)]);
-    [outputsList, timesList, measurementsList] = generateTestData(m, con, times, outputs, sd);
+    con_i = experimentInitialValue(m, [1,2,0]', [], [], ['Con' num2str(i)]);
+    [outputsList, timesList, measurementsList] = generateTestData(m, con_i, times, outputs, sd);
     obs = observationLinearWeightedSumOfSquares(outputsList, timesList, sd, ['Obs' num2str(i)]);
-    obj = obs.Objective(measurementsList);
-    opts = [];
-    opts.UseParams = [i;1];
-    fit.addFitConditionData(obj, con, opts);
+    obj_i = obs.Objective(measurementsList);
+    opts = BuildFitOpts(opts, m, con_i, obj_i, struct('UseParams', [i;1]));
 end
 
-a.verifyEqual(length(fit.Models), nCon); % different UseParams -> added dummy models
-a.verifyEqual(length(fit.Conditions), nCon);
-a.verifyEqual(length(fit.Objectives), nCon);
+a.verifyEqual(length(opts.fit.ModelNames), nCon);
+a.verifyEqual(length(opts.fit.ConditionNames), nCon);
+a.verifyEqual(length(opts.fit.ObjectiveNames), nCon);
+a.verifyEqual(opts.fit.AddDummyModel, [0;1;1]); % different UseParams -> added dummy models
 end
 
 function testMakeMultiModelFit(a)
-opts = [];
-opts.ModelsShareParams = true;
+opts = BuildFitOpts;
 opts.Verbose = 0;
-
-fit = FitObject('UT10_MultiModelFit', opts);
+opts.ModelsShareParams = true;
 
 m1 = equilibrium_model;
-fit.addModel(m1);
 m2 = equilibrium_dimer_model;
-fit.addModel(m2);
 
 times = linspace(0, 1, 5)';
 outputs = {'A','B','C'};
 sd = sdLinear(0.05, 0.1);
     
-con = experimentInitialValue(m1, [1,2,0], [], [], 'Con');
-[outputsList, timesList, measurementsList] = generateTestData(m1, con, times, outputs, sd);
+con1 = experimentInitialValue(m1, [1,2,0], [], [], 'Con');
+[outputsList, timesList, measurementsList] = generateTestData(m1, con1, times, outputs, sd);
 obs = observationLinearWeightedSumOfSquares(outputsList, timesList, sd, 'Obs1');
-obj = obs.Objective(measurementsList);
-opts = [];
-opts.UseParams = [1,2]';
-opts.UseSeeds = [1,2,0]';
-fit.addFitConditionData(obj, con, opts);
+obj1 = obs.Objective(measurementsList);
+opts = BuildFitOpts(opts, m1, con1, obj1, struct('UseParams', [1;2], 'UseSeeds', [1;2;0]));
 
-con = experimentInitialValue(m2, [2,2,0,0], [], [], 'Con2');
-[outputsList, timesList, measurementsList] = generateTestData(m2, con, times, outputs, sd);
+con2 = experimentInitialValue(m2, [2,2,0,0], [], [], 'Con2');
+[outputsList, timesList, measurementsList] = generateTestData(m2, con2, times, outputs, sd);
 obs = observationLinearWeightedSumOfSquares(outputsList, timesList, sd, 'Obs2');
-obj = obs.Objective(measurementsList);
-opts = [];
-opts.UseParams = [3,2,4,5]';
-opts.UseSeeds = [3,4,0,0]';
-fit.addFitConditionData(obj, con, opts);
+obj2 = obs.Objective(measurementsList);
+opts = BuildFitOpts(opts, m2, con2, obj2, struct('UseParams', [3;2;4;5], 'UseSeeds', [3;4;0;0]));
 
-a.verifyEqual(length(fit.Models), 2);
-a.verifyEqual(length(fit.Conditions), 2);
-a.verifyEqual(length(fit.Objectives), 2);
+a.verifyEqual(length(opts.fit.ModelNames), 2);
+a.verifyEqual(length(opts.fit.ConditionNames), 2);
+a.verifyEqual(length(opts.fit.ObjectiveNames), 2);
 end
-
-% TODO: add FitObject-related tests

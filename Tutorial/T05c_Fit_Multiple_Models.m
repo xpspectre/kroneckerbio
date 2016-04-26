@@ -6,7 +6,7 @@ opts = BuildFitOpts;
 opts.Verbose = 2;
 opts.TolOptim = 0.01;
 opts.Normalized = false;
-opts.UseIndependentModels = true; % allows multiple model types and relationships between fit params
+opts.ModelsShareParams = true; % allows multiple model types and relationships between fit params
 
 %% Construct equilibrium experiment A + B <-> C with seeds
 addpath([fileparts(mfilename('fullpath')) '/../Testing']);

@@ -1,16 +1,45 @@
 function out = fixAbsTol(AbsTol, order, integrateObj, nx, nCon, UseAdjoint, UseParams, UseSeeds, UseInputControls, UseDoseControls)
 %fixAbsTol Standardize the presentation of AbsTol
 %
-%   abstol = fixAbsTol(absTol, order, integrateObj, ns, nCon, UseAdjoint,
-%   UseParams, UseSeeds, UseInputControls, UseDoseControls)
-%
 %   There are many ways to present the absolute integration tolerance to
 %   KroneckerBio. This function is the processing center for these
 %   different presentations. The many inputs define the type of problem
 %   that the AbsTol is needed for; essentially, the length. The standard
 %   presentation is a cell array of vectors of the correct length. Each
 %   cell corresponds to an experimental condition.
-
+%
+% Inputs:
+%   AbsTol [ [] | scalar positive double {1e-9} | single cell of struct | single
+%           cell of cell array ] !! Warning: not sure about this !!
+%   order [ 1 | 2 | 3 ]
+%       The order of the integration that needs AbsTol, corresponding to the
+%       bare system, system+sensitivities, and system+sensitivities+2nd order
+%       sensitivities
+%   integrateObj [ true | false ]
+%       Whether the system has continuous obj funs
+%   nx [ scalar positive double ]
+%       The number of states
+%   nCon [ scalar positive double ]
+%       The number of experimental conditions
+%   UseAdjpint [ true | false ]
+%       Whether adjoint sensitivity integration will be used
+%   UseParams [ nk x 1 logical vector ]
+%       The model rate constants that are fit
+%   UseSeeds [ ns x 1 logical vector ]
+%       The experimental condition seeds that are fit
+%   UseInputControls [ nInput cell array of nqi x 1 logical vectors ]
+%       Cell array of input controls to fit in experimental conditions
+%   UseDoseControls [ nInput cell array of nhi x 1 logical vectors ]
+%       Cell array of input controls to fit in experimental conditions
+%
+% Outputs:
+%   out [ nCon x 1 cell array of nODE x 1 double vectors ]
+%       The fixed form of AbsTol, with 1 cell for each experimental condition
+%       containing a vector of the absolute tolerances for each ODE in the
+%       integrated sytem. The order of the ODEs matches that of the various
+%       integrate functions, including a different form if Adjoint sensitivity
+%       integration is used.
+%
 % (c) 2015 David R Hagen & Bruce Tidor
 % This work is released under the MIT license.
 

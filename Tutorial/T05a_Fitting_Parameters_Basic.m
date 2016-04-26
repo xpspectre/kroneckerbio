@@ -1,8 +1,8 @@
 %% T05a Fitting Parameters Basic
 % Simple model construction and fitting.
-%   Demonstrates setup of fitting problem, performs fit, and displays
+% Demonstrates setup of fitting problem, performs fit, and displays
 %   result.
-%   Calculates the linearized parameter uncertainty about the optimal (fit)
+% Calculates the linearized parameter uncertainty about the optimal (fit)
 %   point.
 
 %% Load equilibrium experiment A + B <-> C
@@ -52,4 +52,12 @@ xlabel('Time')
 ylabel('Amount')
 
 %% Linearized parameter uncertainty about optimal value
-F = ObjectiveInformation(mFit, con, obj); %%TODO%% update Objective* functions
+F = ObjectiveInformation(mFit, con, obj);
+
+%% Some more objective function stuff
+G = ObjectiveValue(mFit, con, obj);
+[D, G] = ObjectiveGradient(mFit, con, obj);
+[H, D, G] = ObjectiveHessian(mFit, con, obj);
+p = ObjectiveProbability(mFit, con, obj);
+logp = ObjectiveLogLikelihood(mFit, con, obj);
+

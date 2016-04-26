@@ -124,6 +124,8 @@ classdef FitObject < handle
            %        .GlobalOpts [ options struct scalar {} ]
            %           TODO: API in progress
            
+           error('FitObject has been deprecated and dependencies may be broken while transition to the BuildFitOpts scheme')
+           
            % Clean up inputs
            if nargin < 2
                opts = [];

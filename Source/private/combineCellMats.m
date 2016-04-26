@@ -1,6 +1,7 @@
 function newCell = combineCellMats(baseCell, topCell, mode)
 % Combine two cell matrices of double vectors, specifying overwriting or summing
-% baseCell with topCell values 
+%   baseCell with topCell values
+%
 % Inputs:
 %   baseCell [ 1 x nCell cell matrix of nX x 1 double vectors ]
 %   topCell [ 1 x nCell cell matrix of nX x 1 double vectors ]
@@ -8,6 +9,7 @@ function newCell = combineCellMats(baseCell, topCell, mode)
 %       Combination mode allowing:
 %           'overwrite': replace values in baseCell with nonzero values in topCell
 %           'sum': sum values in double vectors
+%
 % Outputs:
 %   newCell [ 1 x nCell cell matrix of nX x 1 double vectors ]
 

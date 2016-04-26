@@ -86,6 +86,10 @@ function [m, con, obj, options] = ConvertFitOpts(m, con, obj, opts)
 %           Use global optimization in addition to fmincon
 %       .GlobalOpts [ options struct scalar {} ]
 %           TODO: API in progress
+%
+% Note:
+% - The options above may not be complete. Some new functionality may be
+% allowed. See BuildFitOpts for all allowed options.
 
 options = BuildFitOpts;
 
@@ -106,25 +110,25 @@ nhs = [con.nh];
 
 % Ensure UseParams is logical vector
 if ~isfield(opts, 'UseParams')
-    opts.UseParams = ones(nk,1);
+    opts.UseParams = true(nk,1);
 end
 [opts.UseParams, nTk] = fixUseParams(opts.UseParams, nk);
 
 % Ensure UseSeeds is a logical matrix
 if ~isfield(opts, 'UseSeeds')
-    opts.UseSeeds = zeros(ns,1);
+    opts.UseSeeds = false(ns,1);
 end
 [opts.UseSeeds, nTs] = fixUseSeeds(opts.UseSeeds, ns, nCon);
 
 % Ensure UseControls is a cell vector of logical vectors
 if ~isfield(opts, 'UseInputControls')
     for iCon = 1:nCon
-        opts.UseInputControls = zeros(nqs(iCon),1);
+        opts.UseInputControls = false(nqs(iCon),1);
     end
 end
 if ~isfield(opts, 'UseDoseControls')
     for iCon = 1:nCon
-        opts.UseDoseControls = zeros(nhs(iCon),1);
+        opts.UseDoseControls = false(nhs(iCon),1);
     end
 end
 [opts.UseInputControls, nTq] = fixUseControls(opts.UseInputControls, nCon, cat(1,con.nq));

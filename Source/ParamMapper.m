@@ -1,6 +1,6 @@
 classdef (Abstract) ParamMapper < handle
     % Abstract superclass that specifies API of local/condition <-> global/fit
-    % parameters mappers
+    %   parameters mappers
     % Order of parameter types: k, s, q, h
     
     properties (Abstract)
@@ -21,6 +21,12 @@ classdef (Abstract) ParamMapper < handle
             %   ParamSpec [ 1 x 4 cell vector of nXi x 1 double vectors ]
             %       Specification of which parameters to fit and how
             %       they're shared between conditions
+            %
+            % Effect:
+            %   Adds the param spec from an experimental condition to
+            %   ParamMapper, allowing easy mapping between overall Theta vector
+            %   and model+condition-specific fields.
+            
             assert(~isempty(paramSpec), 'ParamMapper:AddCondition: ParamsSpec not found');
             assert(iscell(paramSpec), 'ParamMapper:AddCondition: ParamsSpec not a cell array');
             assert(length(paramSpec) == 4, 'ParamMapper:AddCondition: ParamsSpec has wrong size');
@@ -35,10 +41,12 @@ classdef (Abstract) ParamMapper < handle
         
         function Tlocal = T2Tlocal(this, T)
             % Map overall T vector to local T's in conditions
+            
             % Inputs:
             %    T [ nT x 1 double vector | nT x nT double matrix ]
             %       Overall vector of parameters/gradient or Hessian for fit
             % Outputs:
+            
             %    Tlocal [ nCon x 1 cell vector of 4 x 1 cell vectors of nXi x 1
             %           double vectors | nCon x 1 cell vector of 4 x 4 cell matrices of nXi
             %           x nXj double matrices ]
@@ -128,6 +136,7 @@ classdef (Abstract) ParamMapper < handle
             %           'overwrite': replace values in T with values extracted
             %               from Tlocal
             %           'sum': sum values in double vectors
+            %
             % Outputs:
             %    T [ nT x 1 double vector | nT x nT double matrix ]
             %       Overall vector of parameters/gradient or Hessian for fit
@@ -137,6 +146,7 @@ classdef (Abstract) ParamMapper < handle
             %       denoting k,s,q,h), the 2nd col indicating the position
             %       in the param type, and the 3rd col indicating the index of
             %       the first experiment it came from
+            
             if nargin < 3
                 mode = 'overwrite';
             end

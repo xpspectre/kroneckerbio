@@ -38,7 +38,7 @@ nTs = nnz(opts.UseSeeds);
 nTq = nnz(opts.UseInputControls);
 nTh = nnz(opts.UseDoseControls);
 nT = nTk + nTs + nTq + nTh;
-paramMapper = ParamMapperOneModelType(con);
+paramMapper = ParamMapperOneModelType({opts.paramSpec});
 nObj = length(obj);
 
 if opts.Verbose; fprintf('Integrating sensitivities:\n'); end

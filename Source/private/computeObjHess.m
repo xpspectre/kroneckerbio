@@ -24,18 +24,8 @@ function [G, D, H] = computeObjHess(m, con, obj, opts)
 % Note: this function has been simplified to only allow a single condition
 
 % Process options
-% Note: this currently acts as a shim to existing code - a lot of this can be
-% cleaned up in the future
-opts.UseParams        = logical(con.Extra.ParamsSpec{1});
-opts.UseSeeds         = logical(con.Extra.ParamsSpec{2});
-opts.UseInputControls = logical(con.Extra.ParamsSpec{3});
-opts.UseDoseControls  = logical(con.Extra.ParamsSpec{4});
-
-opts.continuous = any(obj(:).Continuous);
-opts.RelTol = con.Extra.RelTol;
-AbsTol = fixAbsTol(con.Extra.AbsTol, 3, opts.continuous, m.nx, 1, opts.UseAdjoint, opts.UseParams, opts.UseSeeds, {opts.UseInputControls}, {opts.UseDoseControls});
+AbsTol = fixAbsTol(opts.AbsTol, 3, opts.Continuous, m.nx, 1, opts.UseAdjoint, opts.UseParams, opts.UseSeeds, {opts.UseInputControls}, {opts.UseDoseControls});
 opts.AbsTol = AbsTol{1};
-opts.ObjWeights = [obj(:).Weight];
 
 % Constants
 nx = m.nx;
@@ -45,7 +35,7 @@ nTs = nnz(opts.UseSeeds);
 nTq = nnz(opts.UseInputControls);
 nTh = nnz(opts.UseDoseControls);
 nT = nTk + nTs + nTq + nTh;
-paramMapper = ParamMapperOneModelType(con);
+paramMapper = ParamMapperOneModelType({opts.paramSpec});
 nObj = length(obj);
 
 if opts.Verbose; fprintf('Integrating curvature:\n'); end
@@ -61,7 +51,7 @@ if is(m, 'Model.Nlme')
 end
 
 % Extract continuous term
-if opts.continuous
+if opts.Continuous
     error('Continuous objective functions have not been updated')
     G_cont = ints(1).sol.y(nx+1,end);
     

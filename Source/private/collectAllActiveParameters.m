@@ -20,17 +20,15 @@ function [T, details] = collectAllActiveParameters(m, con, ComponentMap, Tlocal2
 %    details [ nT x [Name,Type,Ind] Table ]
 %        Table of parameter name, type {'k','s','q','h'} and the
 %        model (for k) or experiment (for s,q,h) it came from
+%
 
 % Assemble parameters collected from models and conditions into form
 %   Tlocal2T expects
 nCon = length(con);
-[uniqueConInds, ia] = unique(ComponentMap(:,2));
-uniqueComponentMap = ComponentMap(ia,:);
-assert(nCon == length(uniqueConInds));
 Tlocal = cell(nCon,1);
 for iCon = 1:nCon
-    m_i = m(uniqueComponentMap(iCon,1));
-    con_i = con(uniqueComponentMap(iCon,2));
+    m_i = m(ComponentMap{iCon,1});
+    con_i = con(ComponentMap{iCon,2});
     
     k = m_i.k;
     s = con_i.s;
@@ -58,7 +56,7 @@ if nargout == 2
                 kNames = {m(Ind{i}).Parameters.Name};
                 Name{i} = kNames{details_(i,2)};
             case 's'
-                parentModelInd = uniqueComponentMap(:,2) == Ind{i};
+                parentModelInd = [ComponentMap{:,2}] == Ind{i};
                 sNames = {m(parentModelInd).Seeds.Name};
                 Name{i} = sNames{details_(i,2)};
             otherwise

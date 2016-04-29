@@ -88,13 +88,24 @@ function [m, con, obj, options] = ConvertFitOpts(m, con, obj, opts)
 %           TODO: API in progress
 %
 % Note:
-% - The options above may not be complete. Some new functionality may be
-% allowed. See BuildFitOpts for all allowed options.
+% - The options above may not be complete. Some new functionality hacking in
+%   more advanced options into the old input opts struct may work. 
+%   See BuildFitOpts for all allowed options.
 
-options = BuildFitOpts;
+options = BuildFitOpts; % initialize with default options
 
-if nargin == 4
+opts_base = []; % condition-specific options base
+
+if nargin == 4 % assign general options - opts not recognized will be silently ignored
     options = BuildFitOpts(options, opts);
+    
+    if isfield(opts, 'AbsTol')
+        if isnumeric(opts.AbsTol) && isscalar(opts.AbsTol)
+            opts_base.AbsTol = opts.AbsTol;
+        else
+            warning('KroneckerBio:ConvertFitOpts:UnrecognizedAbsTol', 'Currently, only converting a scalar AbsTol is supported. If you want, you can add more functionality here.')
+        end
+    end
 end
 
 assert(isscalar(m), 'KroneckerBio:ConvertFitOpts:MoreThanOneModel', 'The model structure must be scalar') % enforce old input args restriction
@@ -102,6 +113,19 @@ assert(isscalar(m), 'KroneckerBio:ConvertFitOpts:MoreThanOneModel', 'The model s
 % Ensure structures are proper sizes
 [con, nCon] = fixCondition(con);
 [obj, nObj] = fixObjective(obj, nCon);
+
+% Rename conditions if they share names.
+%   Old method uses positions - new method uses names
+conNames = repmat({''},nCon,1);
+for iCon = 1:nCon
+    conName = con(iCon).Name;
+    if any(ismember(conNames, conName))
+        conName = [conName '_dummy_' num2str(iCon)]; % hopefully this is unique
+        con(iCon) = con(iCon).UpdateField(struct('Name', conName));
+    end
+    conNames{iCon} = conName;
+    
+end
 
 nk = m.nk;
 ns = con(1).ns; % required all conditions have same number of seeds - could easily remove this restriction
@@ -143,7 +167,7 @@ end
 [opts.continuous, opts.complex, opts.tGet] = fixIntegrationType(con, obj);
 
 for iCon = 1:nCon
-    opts_i = [];
+    opts_i = opts_base;
     
     % Convert UseParams to expected form; old form is nk x 1 logical vector
     usek = zeros(nk,1);

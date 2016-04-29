@@ -36,7 +36,10 @@ function [m, con, G, D] = FitObjective(m, con, obj, opts)
 %
 % Outputs:
 %	m [ model struct scalar | nModel x 1 model struct vector ]
-%       The model(s) with optimal rate parameters applied
+%       The model(s) with optimal rate parameters applied. If fitting parameters
+%       that vary betwen experimental conditions, extra models are returned
+%       (correspondence between m and con are in opts.fit.ComponentMap) to allow
+%       immediate simulation of fits.
 %	con [ nCon x 1 experiment struct vector | nCon x 1 experiment struct vector ]
 %       The experimental conditions with optimal seed, input control, and
 %       dose control parameters applied
@@ -54,6 +57,8 @@ if nargin < 4 || ~isfield(opts, 'fit')
     % Convert Usage 1 -> Usage 2
     [m, con, obj, opts] = ConvertFitOpts(m, con, obj, opts);
 end
+
+validateOpts(m, con, obj, opts);
 
 verbose = logical(opts.Verbose);
 opts.Verbose = max(opts.Verbose-1,0);
@@ -84,7 +89,7 @@ if isnumeric(opts.RestartJump)
 end
 
 % Add dummy models if multiple conditions depend on independent k's
-nCon = length(opts.fit.AddDummyModel);
+nCon = length(con);
 AddDummyModel = opts.fit.AddDummyModel;
 for iCon = 1:nCon
     iDummy = AddDummyModel(iCon);
@@ -93,9 +98,11 @@ for iCon = 1:nCon
         mDummy = m(iDummy);
         mDummy = mDummy.UpdateField(struct('Name', [mName '_Dummy_' num2str(iCon)]));
         m = [m; mDummy];
-        opts.fit.ComponentMap(iCon,1) = length(m); % reassign component map to point to dummy model
+        opts.fit.ComponentMap{iCon,1} = length(m); % reassign component map to point to dummy model
     end
 end
+
+validateOpts(m, con, obj, opts);
 
 % Collect bounds
 LowerBound = opts.fit.Tlocal2T(opts.fit.LowerBounds);
@@ -168,6 +175,61 @@ That = T0;
 Gbest = Inf;
 Tbest = T0;
 
+%%
+% Check for parallel toolbox if parallel optimization is specified
+if opts.RunParallelExpts && isempty(ver('distcomp'))
+    warning('KroneckerBio:FitObjective:ParallelToolboxMissing', ...
+        ['opts.UseParallelExpts requires the Parallel '...
+        'Computing toolbox. Reverting to serial evaluation.'])
+    opts.RunParallelExpts = false;
+end
+
+% Disable experiment parallelization if global optimization is desired
+if opts.GlobalOptimization && opts.RunParallelExpts
+    warning('KroneckerBio:FitObjective:GlobalOptimizationParallelExperimentsNotSupported', ...
+        ['Both opts.GlobalOptimization and opts.RunParallelExpts ' ...
+        'were set to true. Disabling parallelized experiments.'])
+    opts.RunParallelExpts = false;
+end
+
+% Initialize a parallel pool, or get the current one.
+% Disable experiment parallelization if no pool can be initialized.
+if opts.RunParallelExpts
+    p = gcp();
+    if isempty(p)
+        warning('KroneckerBio:FitObjective:NoParallelPool', ...
+            ['opts.RunParallelExpts was set to true, ' ...
+            'but no parallel pool could be initialized. '...
+            'Reverting to serial optimization.']);
+        opts.RunParallelExpts = false;
+    else
+        nw = p.NumWorkers;
+    end
+end
+
+if opts.RunParallelExpts
+    % Split experiments into worker groups
+    componentMaps = splitList(opts.fit.ComponentMap, nw);
+    
+    % Generate objective function parts for each worker
+    slave_objectives = cell(1,nw);
+    for iw = 1:nw
+        slave_objectives{iw} = generateSlaveObjective(m, con, obj, opts, componentMaps{iw});
+    end
+    
+    % Distribute slave objective functions to workers
+    spmd
+        slave_objectives = codistributed(slave_objectives);
+    end
+    
+    fminconObjective = @parallelExperimentObjective;
+    
+else
+    
+    fminconObjective = @serialObjective;
+    
+end
+
 for iRestart = 1:opts.Restart+1
     % Init abort parameters
     aborted = false;
@@ -175,7 +237,7 @@ for iRestart = 1:opts.Restart+1
     
     % Create local optimization problem
     %   Always needed - used as a subset/refinement of global optimization
-    localProblem = createOptimProblem('fmincon', 'objective', @objective, ...
+    localProblem = createOptimProblem('fmincon', 'objective', fminconObjective, ...
         'x0', That, 'Aeq', opts.Aeq, 'beq', opts.beq, ...
         'lb', LowerBound, 'ub', UpperBound, 'options', localOpts);
     
@@ -270,31 +332,7 @@ end
 % End of function
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%% Objective function for fmincon %%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    function [G, D] = objective(T)
-        
-        % Unnormalize
-        if opts.Normalized
-            T = exp(T);
-        else
-            % If fmincon chooses values that violate the lower bounds, force them to be equal to the lower bounds
-            T(T < LowerBound) = LowerBound(T < LowerBound);
-            T(T > UpperBound) = UpperBound(T > UpperBound);
-        end
-        
-        % Update parameter sets
-        [m, con] = updateAllActiveParameters(m, con, T, opts.fit.ComponentMap, opts.fit.T2Tlocal);
-        
-        % Integrate system to get obj val, grad, etc.
-        if nargout == 1
-            G = computeObjAll(m, con, obj, opts, 'val');
-        end
-        if nargout == 2
-            [G, D] = computeObjAll(m, con, obj, opts, 'grad');
-        end
-    end
+
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%% Halt optimization on terminal goal %%%%%
@@ -309,5 +347,185 @@ end
         end
     end
 
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%% Serial experiment objective function %%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    function [G, D] = serialObjective(T)
+        
+        % Unnormalize
+        if opts.Normalized
+            T = exp(T);
+        else
+            % If fmincon chooses values that violate the lower bounds, force them to be equal to the lower bounds
+            T(T < LowerBound) = LowerBound(T < LowerBound);
+        end
+        
+        % Update parameter sets
+        [m, con] = updateAllActiveParameters(m, con, T, opts.fit.ComponentMap, opts.fit.T2Tlocal);
+        
+        % Integrate system to get obj val, grad, etc.
+        if nargout == 1
+            G = computeObjAll(m, con, obj, opts, 'val');
+        end
+        if nargout == 2
+            [G, D] = computeObjAll(m, con, obj, opts, 'grad');
+        end
+    end
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%% Master parallel experiment objective function %%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    function [G,D] = parallelExperimentObjective(T)
+        
+        if nargout < 2
+            
+            spmd
+                this_slave_objective = getLocalPart(slave_objectives);
+                G_d = this_slave_objective{1}(T);
+            end
+            
+        else
+            
+            spmd
+                this_slave_objective = getLocalPart(slave_objectives);
+                [G_d, D_d] = this_slave_objective{1}(T);
+            end
+           
+            % Sum slave objective function gradients to get total gradient
+            D = zeros(numel(T),1);
+            for jw = 1:nw
+                D = D + D_d{jw};
+            end
+            
+        end
+        
+        % Sum slave objective function values to get total value
+        G = 0;
+        for jw = 1:nw
+            G = G + G_d{jw};
+        end
+        
+    end
+
 end
 
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%% Slave objective function generator %%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+function objectivefun = generateSlaveObjective(m, con, obj, opts, ComponentMap)
+% T_experiment:
+%   nT-by-1 vector of experiment indices indicating which experiment fits
+%   each parameter. 0 indicates model parameter fit by all experiments.
+% i_cons:
+%   Vector of experimental indices to be simulated by the slave function.
+    
+    % If worker has no experiments assigned, assign a 0-valued objective
+    % function to it
+    if isempty(ComponentMap)
+        clear m con obj opts componentMap % to avoid wasting memory in closure
+        objectivefun = @emptyobjective;
+        return
+    end
+    
+    % Build options struct for the experiments on this worker
+    opts_iw = BuildFitOpts;
+    opts_iw = BuildFitOpts(opts_iw, opts);
+    opts_iw.fit = []; % prep for readding just the desired conditions
+    
+    nCon = size(ComponentMap,1);
+    for iCon = 1:nCon
+        conopts = [];
+        conopts.UseParams = opts.fit.UseParams{iCon};
+        conopts.UseSeeds = opts.fit.UseSeeds{iCon};
+        conopts.UseInputControls = opts.fit.UseInputControls{iCon};
+        conopts.UseDoseControls = opts.fit.UseDoseControls{iCon};
+        conopts.LowerBounds = opts.fit.LowerBounds{iCon};
+        conopts.UpperBounds = opts.fit.UpperBounds{iCon};
+        conopts.Continuous = opts.fit.Continuous(iCon);
+        conopts.Complex = opts.fit.Complex(iCon);
+        conopts.tGet = opts.fit.tGet{iCon};
+        conopts.AbsTol = opts.fit.AbsTol{iCon};
+        conopts.ObjWeights = opts.fit.ObjWeights{iCon};
+        opts_iw = BuildFitOpts(opts_iw, m(ComponentMap{iCon,1}), con(ComponentMap{iCon,2}), obj([ComponentMap{iCon,3}]), conopts); %%TODO%% rebuilding BuildFitOpts gives a different overall T vector
+    end
+    
+    % Restore overall param mapper
+    opts_iw.fit.ParamMapper = opts.fit.ParamMapper;
+    opts_iw.fit.Tlocal2T = opts.fit.Tlocal2T;
+    opts_iw.fit.T2Tlocal = opts.fit.T2Tlocal;
+    
+    % Collect bounds
+    LowerBound = opts_iw.fit.Tlocal2T(opts_iw.fit.LowerBounds);
+    UpperBound = opts_iw.fit.Tlocal2T(opts_iw.fit.UpperBounds);
+    if opts_iw.Normalized
+        LowerBound = log(LowerBound);
+        UpperBound = log(UpperBound);
+    end
+    
+    % Keep the components specified in componentMap
+    m = m([ComponentMap{:,1}]);
+    con = con([ComponentMap{:,2}]);
+    obj = obj(vertcat(ComponentMap{:,3}));
+    opts = opts_iw;
+    
+    % Return worker-specific objective function
+    objectivefun = @objective;
+    
+    function [G, D] = objective(T)
+        % Slave objective function
+        
+        % Reset answers
+        G = 0;
+        D = zeros(length(T),1);
+        
+        % Unnormalize
+        if opts.Normalized
+            T = exp(T);
+        else
+            % If fmincon chooses values that violate the lower bounds, force them to be equal to the lower bounds
+            T(T < LowerBound) = LowerBound(T < LowerBound);
+        end
+        
+        % Update parameter sets
+        [m, con] = updateAllActiveParameters(m, con, T, opts.fit.ComponentMap, opts.fit.T2Tlocal);
+        
+        % Integrate system to get obj val, grad, etc.
+        if nargout == 1
+            G = computeObjAll(m, con, obj, opts, 'val');
+        end
+        if nargout == 2
+            [G, D] = computeObjAll(m, con, obj, opts, 'grad');
+        end
+    end
+
+    function [G, D] = emptyobjective(T)
+        % Function to use if worker has no experiments assigned to it
+        G = 0;
+        D = zeros(length(T),1);
+    end
+
+end
+
+%% Helper functions
+
+function validateOpts(m, con, obj, opts)
+% Make sure models+conditions+objectives match (in number at least) the options.
+% Throws an exception if invalid
+assert(isfield(opts, 'fit'), 'FitObjective:validateOpts:MissingExperimentOpts', 'Missing experiment-specific options in opts.fit field.')
+
+componentMap = opts.fit.ComponentMap;
+
+nModels = length(m);
+nModelComponents = length(unique([componentMap{:,1}]));
+assert(nModels == nModelComponents, 'FitObjective:validateOpts:ModelCountMismatch', '%g models in m but %g models in opts', nModels, nModelComponents);
+
+nCon = length(con);
+nConComponents = length(unique([componentMap{:,2}]));
+assert(nCon == nConComponents, 'FitObjective:validateOpts:ConditionCountMismatch', '%g conditions in con but %g conditions in opts', nCon, nConComponents);
+
+nObj = length(obj);
+nObjComponents = length(unique([componentMap{:,3}]));
+assert(nObj == nObjComponents, 'FitObjective:validateOpts:ObjectiveCountMismatch', '%g objectives in obj but %g objectives in opts', nObj, nObjComponents);
+end

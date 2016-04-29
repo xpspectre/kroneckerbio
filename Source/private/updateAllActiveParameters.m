@@ -23,15 +23,11 @@ function [m, con] = updateAllActiveParameters(m, con, T, ComponentMap, T2Tlocal)
 % 	con [ nCon x 1 experiment struct vector ]
 %       The experimental conditions with updated s,q,h
 
-nCon = length(con);
-[uniqueConInds, ia] = unique(ComponentMap(:,2));
-uniqueComponentMap = ComponentMap(ia,:);
-assert(nCon == length(uniqueConInds));
-
 Tlocals = T2Tlocal(T);
+nCon = length(con);
 for iCon = 1:nCon
-    m_i = m(uniqueComponentMap(iCon,1));
-    con_i = con(uniqueComponentMap(iCon,2));
+    m_i = m(ComponentMap{iCon,1});
+    con_i = con(ComponentMap{iCon,2});
     
     % Combine with existing params existing params
     Tlocalold = {m_i.k, con_i.s, con_i.q, con_i.h};
@@ -39,6 +35,6 @@ for iCon = 1:nCon
     
     [k,s,q,h] = deal(Tlocal{:});
     
-    m(uniqueComponentMap(iCon,1)) = m_i.Update(k);
-    con(uniqueComponentMap(iCon,2)) = con_i.Update(s,q,h);
+    m(ComponentMap{iCon,1}) = m_i.Update(k);
+    con(ComponentMap{iCon,2}) = con_i.Update(s,q,h);
 end

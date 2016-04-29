@@ -260,13 +260,6 @@ if nargin == 2
     if ~isempty(newopts)
         opts = pastestruct(opts, newopts);
     end
-%     if ~isempty(newopts)
-%         fields = fieldnames(newopts);
-%         for iField = 1:length(fields)
-%             field = fields{iField};
-%             opts_.(field) = newopts.(field);
-%         end
-%     end
     return
 end
 
@@ -524,9 +517,9 @@ end
 % Each objective will add a row to the component map
 if isfield(fit, 'ComponentMap')
     ComponentMap = fit.ComponentMap;
-    assert(isnumeric(ComponentMap) && all(size(ComponentMap) == [nObjectives,3]))
+    assert(iscell(ComponentMap) && all(size(ComponentMap) == [nConditions,3]))
 else
-    ComponentMap = zeros(0,3);
+    ComponentMap = cell(0,3);
 end
 
 if isfield(fit, 'ParamMapper')
@@ -565,8 +558,8 @@ else % existing model
     %   to add a dummy model when used.
     for i = 1:length(existingModelInd)
         existingUseParams = UseParams{existingModelInd};
-        if newopts.UseParams == existingUseParams
-            newModelInd = existingModelInd;
+        if all(newopts.UseParams == existingUseParams)
+            newModelInd = existingModelInd(1);
             needDummyModel = false;
         end
     end
@@ -601,9 +594,7 @@ AddDummyModel(i) = newDummyInd;
 ObjectiveNames = [ObjectiveNames; newObjectiveNames];
 
 %% Assemble component map
-for i = 1:nNewObjectives
-    ComponentMap = [ComponentMap; newModelInd, newConditionInd, newObjectiveInds(i)];
-end
+ComponentMap = [ComponentMap; {newModelInd, newConditionInd, newObjectiveInds}];
 
 %% Assemble parameter mapper
 ParamMapper.AddCondition({newopts.UseParams, newopts.UseSeeds, newopts.UseInputControls, newopts.UseDoseControls});
@@ -631,6 +622,33 @@ fit.ParamMapper = ParamMapper;
 fit.T2Tlocal = @ParamMapper.T2Tlocal;
 fit.Tlocal2T = @ParamMapper.Tlocal2T;
 opts.fit = fit;
+% opts.Split = @split;
+
+
+% %% Function for returning a new opts struct corresponding to a subset of conditions
+%     function opts_i = split(iw, nw)
+%         % Split experiment-specific fields in opts (opts.fit) to make a new fitting
+%         %   scheme for a subset of the experiments. Useful for splitting experiments
+%         %   across workers to be integrated in parallel.
+%         %
+%         % Inputs:
+%         %   iw [ positive scalar integer ]
+%         %   nw [ positive scalar integer ]
+%         %
+%         % Outputs:
+%         %   opts_i [ options struct scalar ]
+%         componentsMaps = splitComponentMap(opts.fit.ComponentMap, nw);
+%         componentMap = componentsMaps{iw};
+%         
+%         if isempty(componentMap)
+%             opts_i = opts;
+%             opts_i.fit = [];
+%             return
+%         end
+%         
+%         
+%     end
+
 end
 
 %% Helper functions

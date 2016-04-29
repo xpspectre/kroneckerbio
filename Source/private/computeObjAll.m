@@ -57,9 +57,6 @@ function varargout = computeObjAll(m, con, obj, opts, mode, varargin)
 
 nCon = length(con);
 ComponentMap = opts.fit.ComponentMap;
-[uniqueConInds, ia] = unique(ComponentMap(:,2));
-uniqueComponentMap = ComponentMap(ia,:);
-assert(nCon == length(uniqueConInds));
 
 if opts.ComputeSensPlusOne
     assert(nargout < 3, 'KroneckerBio:computeObjAll:HessianOrderTooHigh', 'Hessian cannot be computed since ComputeSensPlusOne requires 3rd order sensitivities.')
@@ -81,9 +78,9 @@ Fs = cell(nCon,1);
 ps = zeros(nCon,1);
 logps = zeros(nCon,1);
 for iCon = 1:nCon
-    m_i = m(uniqueComponentMap(iCon,1));
-    con_i = con(iCon);
-    obj_i = obj(ComponentMap(:,2) == uniqueComponentMap(iCon,2))';
+    m_i = m(ComponentMap{iCon,1});
+    con_i = con(ComponentMap{iCon,2});
+    obj_i = obj([ComponentMap{iCon,3}])';
     
     opts_i = [];
     opts_i.Verbose = opts.Verbose;

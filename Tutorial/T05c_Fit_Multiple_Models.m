@@ -3,7 +3,7 @@
 
 %% Initialize fit object
 opts = BuildFitOpts;
-opts.Verbose = 2;
+opts.Verbose = 1;
 opts.TolOptim = 0.01;
 opts.Normalized = false;
 opts.ModelsShareParams = true; % allows multiple model types and relationships between fit params

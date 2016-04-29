@@ -114,8 +114,28 @@ a.verifyEqual(con.private.TimeScale, time_scale);
 end
 
 function testSimpleExperiment(a)
-[unused, con] = simple_model();
+[~, con] = simple_model();
 verifyDerivatives(a, con)
+end
+
+function testInitialValueExperimentUpdateField(a)
+m = simple_model();
+conName = 'TestCon';
+newName = 'NewCon';
+con = experimentInitialValue(m, [], [], [], conName);
+a.verifyEqual(con.Name, conName)
+con = con.UpdateField(struct('Name', newName));
+a.verifyEqual(con.Name, newName)
+end
+
+function testSteadyStateExperimentUpdateField(a)
+m = simple_model();
+conName = 'TestCon';
+newName = 'NewCon';
+con = experimentSteadyState(m, [], [], [], [], [], conName);
+a.verifyEqual(con.Name, conName)
+con = con.UpdateField(struct('Name', newName));
+a.verifyEqual(con.Name, newName)
 end
 
 function verifyDerivatives(a, con)

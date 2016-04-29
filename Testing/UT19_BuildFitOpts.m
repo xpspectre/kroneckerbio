@@ -85,7 +85,7 @@ a.assertEqual(opts.fit.ComponentMap, [1,1,1;1,2,2]);
 a.assertEqual(opts.fit.AddDummyModel, [0;1]);
 end
 
-function testMassActionModelUpdateExtra(a)
+function testMassActionModelUpdateField(a)
 % Make sure UpdateField works
 m = a.TestData.m;
 
@@ -101,7 +101,7 @@ m = m.UpdateField(struct('Name', 'ModelNewName2'));
 a.assertMatches(m.Name, 'ModelNewName2');
 end
 
-function testAnalyticModelUpdateExtra(a)
+function testAnalyticModelUpdateField(a)
 m = a.TestData.m2;
 
 % Extra data survives m.Update

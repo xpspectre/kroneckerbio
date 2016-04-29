@@ -64,7 +64,7 @@ function con = experimentZero(m)
 %       .Discontinuities [ nonegative vector ]
 %           Any discontinuous times in the u function must be listed here
 %           in order to ensure sucessful integration of the system.
-%       .Update [ handle @(s,q,h) returns struct scalar ]
+%       .Update [ handle @(s,q,h) returns condition struct scalar ]
 %           This function handle allows the parameter values of the
 %           experiment to be changed. Each vector s, q, and h must have the
 %           same size as their appropriate counterparts. The structure
@@ -74,13 +74,17 @@ function con = experimentZero(m)
 %           Some experimental conditions have extra information associated
 %           with them, which is stored here because Matlab does not like
 %           stacking structs with different fields.
+%       .UpdateField [ handle @(struct) returns condition struct scalar ]
+%           This function handle allows the Name of the condition to be changed.
+%           TODO: allow other fields to be changed arbitrarily (although that wouldn't be
+%           useful for any existing experiment).
 
 % (c) 2015 David R Hagen & Bruce Tidor
 % This work is released under the MIT license.
 
 % Special case of numeric inputs
 if isnumeric(m)
-    con = emptystruct(m, 'Type', 'Name', 'nu', 'ns', 'nq', 'nh', 's', 'q', 'h', 'u', 'dudq', 'd2udq2', 'd', 'dddh', 'd2ddh2', 'inp', 'dos', 'SteadyState', 'Periodic', 'Discontinuities', 'Update', 'private');
+    con = emptystruct(m, 'Type', 'Name', 'nu', 'ns', 'nq', 'nh', 's', 'q', 'h', 'u', 'dudq', 'd2udq2', 'd', 'dddh', 'd2ddh2', 'inp', 'dos', 'SteadyState', 'Periodic', 'Discontinuities', 'Update', 'UpdateField', 'private');
     return
 end
 

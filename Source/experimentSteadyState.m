@@ -127,6 +127,7 @@ con.SteadyState = true;
 con.Periodic = false;
 con.Discontinuities = vec(unique([inp.discontinuities; dos.discontinuities]));
 con.Update = @update;
+con.UpdateField = @updateField;
 con.private.BasalInput = basal_input;
 [con.private.basal_u, con.private.basal_dudq, con.private.basal_d2udq2] = getU(basal_input, m.nu);
 con.private.TimeScale = time_scale;
@@ -140,6 +141,20 @@ con.private.BasalDiscontinuities = vec(unique([basal_input.discontinuities]));
         end
         
         con_out = experimentSteadyState(m, s, basal_input.Update(q), inp.Update(q), dos.Update(h), time_scale, name);
+    end
+
+    function con_out = updateField(newfields)
+        % Just supports updating the condition Name for now
+        fields = fieldnames(newfields);
+        for iField = 1:length(fields)
+            field = fields{iField};
+            if strcmp(field, 'Name')
+                newname = newfields.Name;
+                con_out = experimentSteadyState(m, s, basal_input, inp, dos, time_scale, newname);
+            else
+                warning('KroneckerBio:experimentSteadyState:updatefield:InvalidField', 'Only the condition name is allowed to be changed at this time.')
+            end
+        end
     end
 
 end

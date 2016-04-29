@@ -99,10 +99,25 @@ con.SteadyState = false;
 con.Periodic = false;
 con.Discontinuities = vec(unique([inp.discontinuities; dos.discontinuities]));
 con.Update = @update;
+con.UpdateField = @updateField;
 con.private = [];
 
     function con_out = update(s, q, h)
         con_out = experimentInitialValue(m, s, inp.Update(q), dos.Update(h), name);
+    end
+
+    function con_out = updateField(newfields)
+        % Just supports updating the condition Name for now
+        fields = fieldnames(newfields);
+        for iField = 1:length(fields)
+            field = fields{iField};
+            if strcmp(field, 'Name')
+                newname = newfields.Name;
+                con_out = experimentInitialValue(m, s, inp, dos, newname);
+            else
+                warning('KroneckerBio:experimentInitialValue:updatefield:InvalidField', 'Only the condition name is allowed to be changed at this time.')
+            end
+        end
     end
 
 end

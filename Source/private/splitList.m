@@ -16,7 +16,7 @@ function chunks = splitList(list, n)
 %       divided
 
 % Get base chunk length
-nElements = length(list);
+nElements = size(list,1);
 baseChunkLength = floor(nElements/n);
 remainder = mod(nElements,n);
 

@@ -256,6 +256,7 @@ if nargin == 0
 end
 
 %% Handle 2 input args setting general opts
+% TODO: more validation of these options
 if nargin == 2
     if ~isempty(newopts)
         opts = pastestruct(opts, newopts);
@@ -381,7 +382,7 @@ end
 newopts.tGet = unique(newopts.tGet);
 
 if ~isscalar(newopts.AbsTol) || ~isnumeric(newopts.AbsTol)
-    warning('KroneckerBio:BuildFitOpts:AbsTolFormNotRecognized', 'BuildFitOpts currently only supports a scalar number of AbsTol. Hope you know what you''re doing.')
+%     warning('KroneckerBio:BuildFitOpts:AbsTolFormNotRecognized', 'BuildFitOpts currently only supports a scalar number of AbsTol. Hope you know what you''re doing.')
 end
 
 %% Get private fit struct from opts (holds useful fields)

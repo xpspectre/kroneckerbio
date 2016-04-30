@@ -55,7 +55,7 @@ a.assertEqual(size(opts.fit.ObjectiveNames), [1,1])
 a.assertEqual(size(opts.fit.UseSeeds), [1,1])
 a.assertEqual(opts.fit.UseSeeds{1}, [0;0;0])
 
-a.assertEqual(opts.fit.ComponentMap, [1,1,1])
+a.assertEqual(opts.fit.ComponentMap, {1,1,1})
 
 % Test parameter collecting - can't do this now because it's private
 % [T, details] = collectAllActiveParameters(a.TestData.m, a.TestData.con1, opts.fit.ComponentMap, opts.fit.Tlocal2T);
@@ -76,12 +76,12 @@ LB = 10.^[-2,   -2]';
 UB = 10.^[ 6,    6]';
 Use    = [ 1,    0]';
 opts = BuildFitOpts(opts, a.TestData.m, a.TestData.con1, a.TestData.obj1, struct('ParamSpec', table(Type, LB, UB, Use, 'RowNames', Name)));
-a.assertEqual(opts.fit.ComponentMap, [1,1,1])
+a.assertEqual(opts.fit.ComponentMap, {1,1,1})
 
 % Test that additional fit condition data that needs to create a dummy model works
 Use    = [ 2,    0]';
 opts = BuildFitOpts(opts, a.TestData.m, a.TestData.con2, a.TestData.obj2, struct('ParamSpec', table(Type, LB, UB, Use, 'RowNames', Name)));
-a.assertEqual(opts.fit.ComponentMap, [1,1,1;1,2,2]);
+a.assertEqual(opts.fit.ComponentMap, {1,1,1;1,2,2});
 a.assertEqual(opts.fit.AddDummyModel, [0;1]);
 end
 
@@ -177,7 +177,7 @@ newopts4.UseParams = [1;3]; % 2nd param is independent
 opts = BuildFitOpts(opts, m, con4, [obj4_1; obj4_2], newopts4);
 
 % Test that opts' fields are right
-a.assertEqual(opts.fit.ComponentMap, [1,1,1;1,2,2;1,3,3;1,4,4;1,4,5]);
+a.assertEqual(opts.fit.ComponentMap, {1,1,1;1,2,2;1,3,3;1,4,[4;5]});
 a.assertEqual(opts.fit.AddDummyModel, [0;0;1;1]);
 
 % Test getting and setting params, bounds, etc

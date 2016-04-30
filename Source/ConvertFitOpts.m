@@ -92,20 +92,14 @@ function [m, con, obj, options] = ConvertFitOpts(m, con, obj, opts)
 %   more advanced options into the old input opts struct may work. 
 %   See BuildFitOpts for all allowed options.
 
+if nargin < 4
+    opts = [];
+end
+
 options = BuildFitOpts; % initialize with default options
 
-opts_base = []; % condition-specific options base
-
-if nargin == 4 % assign general options - opts not recognized will be silently ignored
+if ~isempty(opts) % assign general options - opts not recognized will be silently ignored
     options = BuildFitOpts(options, opts);
-    
-    if isfield(opts, 'AbsTol')
-        if isnumeric(opts.AbsTol) && isscalar(opts.AbsTol)
-            opts_base.AbsTol = opts.AbsTol;
-        else
-            warning('KroneckerBio:ConvertFitOpts:UnrecognizedAbsTol', 'Currently, only converting a scalar AbsTol is supported. If you want, you can add more functionality here.')
-        end
-    end
 end
 
 assert(isscalar(m), 'KroneckerBio:ConvertFitOpts:MoreThanOneModel', 'The model structure must be scalar') % enforce old input args restriction
@@ -113,6 +107,18 @@ assert(isscalar(m), 'KroneckerBio:ConvertFitOpts:MoreThanOneModel', 'The model s
 % Ensure structures are proper sizes
 [con, nCon] = fixCondition(con);
 [obj, nObj] = fixObjective(obj, nCon);
+
+% Handle basic AbsTol
+AbsTol = [];
+if isfield(opts, 'AbsTol')
+    if isscalar(opts.AbsTol) && (isnumeric(opts.AbsTol) || isstruct(opts.AbsTol))
+        AbsTol = repmat({opts.AbsTol}, nCon, 1);
+    elseif iscell(opts.AbsTol) && length(opts.AbsTol) == nCon
+        AbsTol = opts.AbsTol;
+    else
+        warning('KroneckerBio:ConvertFitOpts:UnrecognizedAbsTol', 'Form of opts.AbsTol not recognized. If you want, you can add more functionality here.')
+    end
+end
 
 % Rename conditions if they share names.
 %   Old method uses positions - new method uses names
@@ -167,7 +173,11 @@ end
 [opts.continuous, opts.complex, opts.tGet] = fixIntegrationType(con, obj);
 
 for iCon = 1:nCon
-    opts_i = opts_base;
+    opts_i = [];
+    
+    if ~isempty(AbsTol)
+        opts_i.AbsTol = AbsTol{iCon};
+    end
     
     % Convert UseParams to expected form; old form is nk x 1 logical vector
     usek = zeros(nk,1);

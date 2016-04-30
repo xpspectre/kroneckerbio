@@ -17,7 +17,7 @@ function testObjectiveInformationArguments(a)
 
 dxdTSol = {}; % blank for testing
 
-[F1, FAll1] = ObjectiveInformation(m, con, obj);
+[F1, FAll1] = ObjectiveInformation(m, con, obj, struct('Verbose', 0)); % only to suppress output; get FIM of default fit params
 a.verifyEqual(size(F1), [10,10]);
 a.verifyEqual(size(FAll1), [1,1]);
 

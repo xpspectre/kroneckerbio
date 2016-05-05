@@ -444,6 +444,20 @@ else
     UseDoseControls = {};
 end
 
+if isfield(fit, 'ParamNames')
+    ParamNames = fit.ParamNames;
+    assert(iscell(ParamNames) && length(ParamNames) == nConditions)
+else
+    ParamNames = {};
+end
+
+if isfield(fit, 'SeedNames')
+    SeedNames = fit.SeedNames;
+    assert(iscell(SeedNames) && length(SeedNames) == nConditions)
+else
+    SeedNames = {};
+end
+
 if isfield(fit, 'ParamSpec')
     ParamSpec = fit.ParamSpec;
     assert(iscell(ParamSpec) && length(ParamSpec) == nConditions)
@@ -582,6 +596,8 @@ UseParams{i} = newopts.UseParams;
 UseSeeds{i} = newopts.UseSeeds;
 UseInputControls{i} = newopts.UseInputControls;
 UseDoseControls{i} = newopts.UseDoseControls;
+ParamNames{i} = kNames;
+SeedNames{i} = sNames;
 ParamSpec{i} = ParamSpec_;
 ParamStart{i} = ParamStart_;
 LowerBounds{i} = LowerBounds_;
@@ -604,6 +620,8 @@ ParamMapper.AddCondition({newopts.UseParams, newopts.UseSeeds, newopts.UseInputC
 fit.ModelNames = vec(ModelNames);
 fit.ConditionNames = vec(ConditionNames);
 fit.ObjectiveNames = vec(ObjectiveNames);
+fit.ParamNames = vec(ParamNames);
+fit.SeedNames = vec(SeedNames);
 fit.UseParams = vec(UseParams);
 fit.UseSeeds = vec(UseSeeds);
 fit.UseInputControls = vec(UseInputControls);
@@ -622,33 +640,36 @@ fit.ComponentMap = ComponentMap;
 fit.ParamMapper = ParamMapper;
 fit.T2Tlocal = @ParamMapper.T2Tlocal;
 fit.Tlocal2T = @ParamMapper.Tlocal2T;
+fit.ParamInfo = @getParamInfo;
 opts.fit = fit;
-% opts.Split = @split;
 
-
-% %% Function for returning a new opts struct corresponding to a subset of conditions
-%     function opts_i = split(iw, nw)
-%         % Split experiment-specific fields in opts (opts.fit) to make a new fitting
-%         %   scheme for a subset of the experiments. Useful for splitting experiments
-%         %   across workers to be integrated in parallel.
-%         %
-%         % Inputs:
-%         %   iw [ positive scalar integer ]
-%         %   nw [ positive scalar integer ]
-%         %
-%         % Outputs:
-%         %   opts_i [ options struct scalar ]
-%         componentsMaps = splitComponentMap(opts.fit.ComponentMap, nw);
-%         componentMap = componentsMaps{iw};
-%         
-%         if isempty(componentMap)
-%             opts_i = opts;
-%             opts_i.fit = [];
-%             return
-%         end
-%         
-%         
-%     end
+    function paramInfo = getParamInfo()
+        paramTypes = {'k','s','q','h'};
+        [T, details_] = fit.Tlocal2T(fit.ParamStart); % dummy params 
+        nT = numel(T);
+        
+        Name = cell(nT,1);
+        Type = cell(nT,1);
+        Ind = cell(nT,1);
+        
+        for iT = 1:nT
+            Ind{iT} = details_(iT,3);
+            Type{iT} = paramTypes{details_(iT,1)};
+            switch Type{iT}
+                case 'k'
+                    kNames = fit.ParamNames{Ind{iT}};
+                    Name{iT} = kNames{details_(iT,2)};
+                case 's'
+                    parentModelInd = fit.ComponentMap{Ind{iT}};
+                    sNames = fit.SeedNames{parentModelInd};
+                    Name{iT} = sNames{details_(iT,2)};
+                otherwise
+                    error('q and h and other param types not implemented yet')
+            end
+        end
+        
+        paramInfo = table(Name,Type,Ind);
+    end
 
 end
 

@@ -2,9 +2,9 @@ function m = finalizeModelAnalytic(m, opts)
 %finalizeModelAnalytic prepares a constructed Model.Analytic for use with the
 %rest of kroneckerbio. Generates symbolic expressions and requires the symbolic
 %toolbox.
-% 
+%
 %   m = finalizeModelAnalytic(m, opts)
-% 
+%
 %   Inputs
 %   m: [ Model.Analytic ]
 %       Analytic model with components to add in the m.add.* fields
@@ -156,6 +156,14 @@ zType = {m.Rules.Type}';
 
 y = vec({m.Outputs.Expression});
 
+%% Determine if model is built with reactions or ODEs directly
+if any(ismember(zType, 'rate'))
+    if verbose; fprintf('Building analytic model directly from ODEs...\n'); end
+    useReactions = false;
+else
+    useReactions = true;
+end
+
 %% Symbolic representations of model components
 t_syms = sym('t');
 v_syms = vec(sym(arrayfun(@(i)sprintf('v_%dx', i), 1:nv, 'UniformOutput', false)));
@@ -212,8 +220,7 @@ if ~verLessThan('matlab', '9.0') && strcmp(st.state, 'on'); warning('on', 'symbo
 % Using built-in "subs" function is sufficient since only a single symbolic
 %   expression is being substituted for each call
 singleSubRuleInds = find(ismember(zType, 'single sub'));
-nSingleSubRules = length(singleSubRuleInds);
-for i = 1:nSingleSubRules
+for i = singleSubRuleInds
     target = zTrgt(i);
     expression = zExpr(i);
     x0 = subs(x0, target, expression);
@@ -245,6 +252,23 @@ if opts.EvaluateExternalFunctions
     y  = evaluate_external_functions(y,  [t_strs; s_strs; k_strs; u_strs; x_strs]);
 end
 
+%% Perform substitutions in ODEs
+if ~useReactions
+    odeInds = find(ismember(zType, 'rate'));
+    odes = zExpr(odeInds);
+    odes = fastsubs(odes, zTrgt(singleSubRuleInds), zExpr(singleSubRuleInds));
+    odes = fastsubs(odes, subTrgts, subExprs);
+    ddts = zTrgt(odeInds);
+    
+    % Make sure number of ODEs matches the number of states found
+    % Note/TODO: Make sure all states found in ODEs are specified with AddStates
+    assert(length(ddts) == length(x0), 'Number of ODEs specified doesn''t match number of states')
+    
+    % Reorder ODEs to match states
+    [~, sortOrder] = sort(ddts);
+    odes = odes(sortOrder);
+end
+
 %% Process stoichiometry and rate forms/RHS's
 % Make stoichiometry matrix nSpecies x nReactions
 % All species have qualified names
@@ -271,7 +295,11 @@ size_S = size(S);
 S_sym = initializeMatrixMupad(i_S, j_S, val_S, size_S(1), size_S(2));
 
 %% Construct ODE system
-f = S_sym*r;
+if useReactions
+    f = S_sym*r;
+else
+    f = odes;
+end
 
 %% Determine the variables in each expression
 x0str = fastchar(x0);
@@ -284,6 +312,12 @@ x0hask = expression_has_variable(x0str, k_strs);
 rhasx = expression_has_variable(rstr, x_strs);
 rhasu = expression_has_variable(rstr, u_strs);
 rhask = expression_has_variable(rstr, k_strs);
+if ~useReactions
+    fstr = fastchar(f);
+    fhasx = expression_has_variable(fstr, x_strs);
+    fhasu = expression_has_variable(fstr, u_strs);
+    fhask = expression_has_variable(fstr, k_strs);
+end
 
 yhasx = expression_has_variable(ystr, x_strs);
 yhasu = expression_has_variable(ystr, u_strs);
@@ -300,9 +334,9 @@ sizes.y = ny;
 
 % The above logical arrays are the nonzero elements of the first derivative
 % matrix for r, u, and y. Record these in a map, and construct a
-% function that can retrieve which elements in a derivative matrix are 
-% nonzero or, in the absence of this information, calculate whether 
-% higher-order derivatives can contain a given parameter, input, or state 
+% function that can retrieve which elements in a derivative matrix are
+% nonzero or, in the absence of this information, calculate whether
+% higher-order derivatives can contain a given parameter, input, or state
 % based on the lower derivatives.
 nonzero_map = containers.Map;
 nonzero_map('r') = true(nr,1);
@@ -311,9 +345,15 @@ nonzero_map('y') = true(ny,1);
 nonzero_map('rx') = rhasx;
 nonzero_map('ru') = rhasu;
 nonzero_map('rk') = rhask;
-nonzero_map('fx') = logical(full(abs(S)*rhasx)); % Take the absolute value of S so that there are no accidental cancellations between positive and negative terms
-nonzero_map('fu') = logical(full(abs(S)*rhasu));
-nonzero_map('fk') = logical(full(abs(S)*rhask));
+if useReactions
+    nonzero_map('fx') = logical(full(abs(S)*rhasx)); % Take the absolute value of S so that there are no accidental cancellations between positive and negative terms
+    nonzero_map('fu') = logical(full(abs(S)*rhasu));
+    nonzero_map('fk') = logical(full(abs(S)*rhask));
+else
+    nonzero_map('fx') = logical(full(fhasx));
+    nonzero_map('fu') = logical(full(fhasu));
+    nonzero_map('fk') = logical(full(fhask));
+end
 nonzero_map('yx') = yhasx;
 nonzero_map('yu') = yhasu;
 nonzero_map('yk') = yhask;
@@ -324,35 +364,57 @@ if verbose; fprintf('\n'); end
 
 %% Generate derivatives of desired order
 if order >= 1
-    % Gradient of r with respect to x
-    if verbose; fprintf('Calculating drdx...'); end
-    drdx = calculate_derivative(r, x_syms, 'r', {'x'});
-    if verbose; fprintf('Done.\n'); end
     
-    % Gradient of r with respect to u
-    if verbose; fprintf('Calculating drdu...'); end
-    drdu = calculate_derivative(r, u_syms, 'r', {'u'});
-    if verbose; fprintf('Done.\n'); end
-    
-    % Gradient of r with respect to k
-    if verbose; fprintf('Calculating drdk...'); end
-    drdk = calculate_derivative(r, k_syms, 'r', {'k'});
-    if verbose; fprintf('Done.\n'); end
-    
-    % Gradient of f with respect to x
-    if verbose; fprintf('Calculating dfdx...'); end
-    dfdx = S_sym*drdx;
-    if verbose; fprintf('Done.\n'); end
-    
-    % Gradient of f with respect to u
-    if verbose; fprintf('Calculating dfdu...'); end
-    dfdu = S_sym*drdu;
-    if verbose; fprintf('Done.\n'); end
-    
-    % Gradient of f with respect to k
-    if verbose; fprintf('Calculating dfdk...'); end
-    dfdk = S_sym*drdk;
-    if verbose; fprintf('Done.\n'); end
+    if useReactions
+        % Gradient of r with respect to x
+        if verbose; fprintf('Calculating drdx...'); end
+        drdx = calculate_derivative(r, x_syms, 'r', {'x'});
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of r with respect to u
+        if verbose; fprintf('Calculating drdu...'); end
+        drdu = calculate_derivative(r, u_syms, 'r', {'u'});
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of r with respect to k
+        if verbose; fprintf('Calculating drdk...'); end
+        drdk = calculate_derivative(r, k_syms, 'r', {'k'});
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of f with respect to x
+        if verbose; fprintf('Calculating dfdx...'); end
+        dfdx = S_sym*drdx;
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of f with respect to u
+        if verbose; fprintf('Calculating dfdu...'); end
+        dfdu = S_sym*drdu;
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of f with respect to k
+        if verbose; fprintf('Calculating dfdk...'); end
+        dfdk = S_sym*drdk;
+        if verbose; fprintf('Done.\n'); end
+    else
+        drdx = '';
+        drdu = '';
+        drdk = '';
+        
+        % Gradient of f with respect to x
+        if verbose; fprintf('Calculating dfdx...'); end
+        dfdx = calculate_derivative(f, x_syms, 'f', {'x'});
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of f with respect to u
+        if verbose; fprintf('Calculating dfdu...'); end
+        dfdu = calculate_derivative(f, u_syms, 'f', {'u'});
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of f with respect to k
+        if verbose; fprintf('Calculating dfdk...'); end
+        dfdk = calculate_derivative(f, k_syms, 'f', {'k'});
+        if verbose; fprintf('Done.\n'); end
+    end
     
     % Gradient of y with respect to x
     if verbose; fprintf('Calculating dydx...'); end
@@ -368,12 +430,12 @@ if order >= 1
     if verbose; fprintf('Calculating dydk...'); end
     dydk = calculate_derivative(y, k_syms, 'y', {'k'});
     if verbose; fprintf('Done.\n'); end
-
+    
     % Gradient of x0 with respect to s
     if verbose; fprintf('Calculating dx0ds...'); end
     dx0ds = calculate_derivative(x0, s_syms, 'x', {'s'});
     if verbose; fprintf('Done.\n'); end
-
+    
     % Gradient of x0 with respect to k
     if verbose; fprintf('Calculating dx0k...'); end
     dx0dk = calculate_derivative(x0, k_syms, 'x', {'k'});
@@ -391,104 +453,161 @@ else
 end
 
 if order >= 2
-    % Gradient of drdx with respect to x
-    if verbose; fprintf('Calculating d2rdx2...'); end
-    d2rdx2 = calculate_derivative(drdx, x_syms, 'r', {'x','x'});
-    if verbose; fprintf('Done.\n'); end
-    
-    % Gradient of drdu with respect to u
-    if verbose; fprintf('Calculating d2rdu2...'); end
-    d2rdu2 = calculate_derivative(drdu, u_syms, 'r', {'u','u'});
-    if verbose; fprintf('Done.\n'); end
-    
-    % Gradient of drdu with respect to x
-    if verbose; fprintf('Calculating d2rdxdu...'); end
-    d2rdxdu = calculate_derivative(drdu, x_syms, 'r', {'u','x'});
-    if verbose; fprintf('Done.\n'); end
-    
-    % Gradient of drdx with respect to u
-    if verbose; fprintf('Calculating d2rdudx...'); end
-    d2rdudx = calculate_derivative(drdx, u_syms, 'r', {'x','u'});
-    if verbose; fprintf('Done.\n'); end
-    
-    % Gradient of drdk with respect to k
-    if verbose; fprintf('Calculating d2rdk2...'); end
-    d2rdk2 = calculate_derivative(drdk, k_syms, 'r', {'k','k'});
-    if verbose; fprintf('Done.\n'); end
-    
-    % Gradient of drdx with respect to k
-    if verbose; fprintf('Calculating d2rdkdx...'); end
-    d2rdkdx = calculate_derivative(drdx, k_syms, 'r', {'x','k'});
-    if verbose; fprintf('Done.\n'); end
-    
-    % Gradient of drdu with respect to k
-    if verbose; fprintf('Calculating d2rdkdu...'); end
-    d2rdkdu = calculate_derivative(drdu, k_syms, 'r', {'u','k'});
-    if verbose; fprintf('Done.\n'); end
-    
-    % Gradient of drdk with respect to x
-    if verbose; fprintf('Calculating d2rdxdk...'); end
-    d2rdxdk = calculate_derivative(drdk, x_syms, 'r', {'k','x'});
-    if verbose; fprintf('Done.\n'); end
-    
-    % Gradient of drdk with respect to u
-    if verbose; fprintf('Calculating d2rdudk...'); end
-    d2rdudk = calculate_derivative(drdk, u_syms, 'r', {'k','u'});
-    if verbose; fprintf('Done.\n'); end
-    
-    % Gradient of dfdx with respect to x
-    if verbose; fprintf('Calculating d2fdx2...'); end
-    d2fdx2 = S_sym*reshape_derivative(d2rdx2, [nr nx*nx], 'r', {'x' 'x'});
-    d2fdx2 = reshape_derivative(d2fdx2, [nx*nx nx], 'f', {'x' 'x'});
-    if verbose; fprintf('Done.\n'); end
-    
-    % Gradient of dfdu with respect to u
-    if verbose; fprintf('Calculating d2fdu2...'); end
-    d2fdu2 = S_sym*reshape_derivative(d2rdu2, [nr,nu*nu], 'r', {'u' 'u'});
-    d2fdu2 = reshape_derivative(d2fdu2, [nx*nu,nu], 'f', {'u' 'u'});
-    if verbose; fprintf('Done.\n'); end
-    
-    % Gradient of dfdu with respect to x
-    if verbose; fprintf('Calculating d2fdxdu...'); end
-    d2fdxdu = S_sym*reshape_derivative(d2rdxdu, [nr,nu*nx], 'r', {'u' 'x'});
-    d2fdxdu = reshape_derivative(d2fdxdu, [nx*nu,nx], 'f', {'u' 'x'});
-    if verbose; fprintf('Done.\n'); end
-    
-    % Gradient of dfdx with respect to u
-    if verbose; fprintf('Calculating d2fdudx...'); end
-    d2fdudx = S_sym*reshape_derivative(d2rdudx, [nr,nx*nu], 'r', {'x' 'u'});
-    d2fdudx = reshape_derivative(d2fdudx, [nx*nx,nu], 'f', {'x' 'u'});
-    if verbose; fprintf('Done.\n'); end
-    
-    % Gradient of dfdk with respect to k
-    if verbose; fprintf('Calculating d2fdk2...'); end
-    d2fdk2 = S_sym*reshape_derivative(d2rdk2, [nr,nk*nk], 'r', {'k' 'k'});
-    d2fdk2 = reshape_derivative(d2fdk2, [nx*nk,nk], 'f', {'k' 'k'});
-    if verbose; fprintf('Done.\n'); end
-    
-    % Gradient of dfdx with respect to k
-    if verbose; fprintf('Calculating d2fdkdx...'); end
-    d2fdkdx = S_sym*reshape_derivative(d2rdkdx, [nr,nx*nk], 'r', {'x' 'k'});
-    d2fdkdx = reshape_derivative(d2fdkdx, [nx*nx,nk], 'f', {'x' 'k'});
-    if verbose; fprintf('Done.\n'); end
-    
-    % Gradient of dfdu with respect to k
-    if verbose; fprintf('Calculating d2fdkdu...'); end
-    d2fdkdu = S_sym*reshape_derivative(d2rdkdu, [nr,nu*nk], 'r',{'u' 'k'});
-    d2fdkdu = reshape_derivative(d2fdkdu, [nx*nu,nk], 'f',{'u' 'k'});
-    if verbose; fprintf('Done.\n'); end
-    
-    % Gradient of dfdk with respect to x
-    if verbose; fprintf('Calculating d2fdxdk...'); end
-    d2fdxdk = S_sym*reshape_derivative(d2rdxdk, [nr,nk*nx], 'r',{'k' 'x'});
-    d2fdxdk = reshape_derivative(d2fdxdk, [nx*nk,nx], 'f',{'k' 'x'});
-    if verbose; fprintf('Done.\n'); end
-    
-    % Gradient of dfdk with respect to u
-    if verbose; fprintf('Calculating d2fdudk...'); end
-    d2fdudk = S_sym*reshape_derivative(d2rdudk, [nr,nk*nu], 'r',{'k' 'u'});
-    d2fdudk = reshape_derivative(d2fdudk, [nx*nk,nu], 'f',{'k' 'u'});
-    if verbose; fprintf('Done.\n'); end
+    if useReactions
+        % Gradient of drdx with respect to x
+        if verbose; fprintf('Calculating d2rdx2...'); end
+        d2rdx2 = calculate_derivative(drdx, x_syms, 'r', {'x','x'});
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of drdu with respect to u
+        if verbose; fprintf('Calculating d2rdu2...'); end
+        d2rdu2 = calculate_derivative(drdu, u_syms, 'r', {'u','u'});
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of drdu with respect to x
+        if verbose; fprintf('Calculating d2rdxdu...'); end
+        d2rdxdu = calculate_derivative(drdu, x_syms, 'r', {'u','x'});
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of drdx with respect to u
+        if verbose; fprintf('Calculating d2rdudx...'); end
+        d2rdudx = calculate_derivative(drdx, u_syms, 'r', {'x','u'});
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of drdk with respect to k
+        if verbose; fprintf('Calculating d2rdk2...'); end
+        d2rdk2 = calculate_derivative(drdk, k_syms, 'r', {'k','k'});
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of drdx with respect to k
+        if verbose; fprintf('Calculating d2rdkdx...'); end
+        d2rdkdx = calculate_derivative(drdx, k_syms, 'r', {'x','k'});
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of drdu with respect to k
+        if verbose; fprintf('Calculating d2rdkdu...'); end
+        d2rdkdu = calculate_derivative(drdu, k_syms, 'r', {'u','k'});
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of drdk with respect to x
+        if verbose; fprintf('Calculating d2rdxdk...'); end
+        d2rdxdk = calculate_derivative(drdk, x_syms, 'r', {'k','x'});
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of drdk with respect to u
+        if verbose; fprintf('Calculating d2rdudk...'); end
+        d2rdudk = calculate_derivative(drdk, u_syms, 'r', {'k','u'});
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of dfdx with respect to x
+        if verbose; fprintf('Calculating d2fdx2...'); end
+        d2fdx2 = S_sym*reshape_derivative(d2rdx2, [nr nx*nx], 'r', {'x' 'x'});
+        d2fdx2 = reshape_derivative(d2fdx2, [nx*nx nx], 'f', {'x' 'x'});
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of dfdu with respect to u
+        if verbose; fprintf('Calculating d2fdu2...'); end
+        d2fdu2 = S_sym*reshape_derivative(d2rdu2, [nr,nu*nu], 'r', {'u' 'u'});
+        d2fdu2 = reshape_derivative(d2fdu2, [nx*nu,nu], 'f', {'u' 'u'});
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of dfdu with respect to x
+        if verbose; fprintf('Calculating d2fdxdu...'); end
+        d2fdxdu = S_sym*reshape_derivative(d2rdxdu, [nr,nu*nx], 'r', {'u' 'x'});
+        d2fdxdu = reshape_derivative(d2fdxdu, [nx*nu,nx], 'f', {'u' 'x'});
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of dfdx with respect to u
+        if verbose; fprintf('Calculating d2fdudx...'); end
+        d2fdudx = S_sym*reshape_derivative(d2rdudx, [nr,nx*nu], 'r', {'x' 'u'});
+        d2fdudx = reshape_derivative(d2fdudx, [nx*nx,nu], 'f', {'x' 'u'});
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of dfdk with respect to k
+        if verbose; fprintf('Calculating d2fdk2...'); end
+        d2fdk2 = S_sym*reshape_derivative(d2rdk2, [nr,nk*nk], 'r', {'k' 'k'});
+        d2fdk2 = reshape_derivative(d2fdk2, [nx*nk,nk], 'f', {'k' 'k'});
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of dfdx with respect to k
+        if verbose; fprintf('Calculating d2fdkdx...'); end
+        d2fdkdx = S_sym*reshape_derivative(d2rdkdx, [nr,nx*nk], 'r', {'x' 'k'});
+        d2fdkdx = reshape_derivative(d2fdkdx, [nx*nx,nk], 'f', {'x' 'k'});
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of dfdu with respect to k
+        if verbose; fprintf('Calculating d2fdkdu...'); end
+        d2fdkdu = S_sym*reshape_derivative(d2rdkdu, [nr,nu*nk], 'r',{'u' 'k'});
+        d2fdkdu = reshape_derivative(d2fdkdu, [nx*nu,nk], 'f',{'u' 'k'});
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of dfdk with respect to x
+        if verbose; fprintf('Calculating d2fdxdk...'); end
+        d2fdxdk = S_sym*reshape_derivative(d2rdxdk, [nr,nk*nx], 'r',{'k' 'x'});
+        d2fdxdk = reshape_derivative(d2fdxdk, [nx*nk,nx], 'f',{'k' 'x'});
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of dfdk with respect to u
+        if verbose; fprintf('Calculating d2fdudk...'); end
+        d2fdudk = S_sym*reshape_derivative(d2rdudk, [nr,nk*nu], 'r',{'k' 'u'});
+        d2fdudk = reshape_derivative(d2fdudk, [nx*nk,nu], 'f',{'k' 'u'});
+        if verbose; fprintf('Done.\n'); end
+    else
+        d2rdx2  = '';
+        d2rdu2  = '';
+        d2rdxdu = '';
+        d2rdudx = '';
+        d2rdk2  = '';
+        d2rdkdx = '';
+        d2rdkdu = '';
+        d2rdxdk = '';
+        d2rdudk = '';
+        
+        % Gradient of dfdx with respect to x
+        if verbose; fprintf('Calculating d2fdx2...'); end
+        d2fdx2 = calculate_derivative(dfdx, x_syms, 'f', {'x','x'});
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of dfdu with respect to u
+        if verbose; fprintf('Calculating d2fdu2...'); end
+        d2fdu2 = calculate_derivative(dfdu, u_syms, 'f', {'u','u'});
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of dfdu with respect to x
+        if verbose; fprintf('Calculating d2fdxdu...'); end
+        d2fdxdu = calculate_derivative(dfdu, x_syms, 'f', {'u','x'});
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of dfdx with respect to u
+        if verbose; fprintf('Calculating d2fdudx...'); end
+        d2fdudx = calculate_derivative(dfdx, u_syms, 'f', {'x','u'});
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of dfdk with respect to k
+        if verbose; fprintf('Calculating d2fdk2...'); end
+        d2fdk2 = calculate_derivative(dfdk, k_syms, 'f', {'k','k'});
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of dfdx with respect to k
+        if verbose; fprintf('Calculating d2fdkdx...'); end
+        d2fdkdx = calculate_derivative(dfdx, k_syms, 'f', {'x','k'});
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of dfdu with respect to k
+        if verbose; fprintf('Calculating d2fdkdu...'); end
+        d2fdkdu = calculate_derivative(dfdu, k_syms, 'f', {'u','k'});
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of dfdk with respect to x
+        if verbose; fprintf('Calculating d2fdxdk...'); end
+        d2fdxdk = calculate_derivative(dfdk, x_syms, 'f', {'k','x'});
+        if verbose; fprintf('Done.\n'); end
+        
+        % Gradient of dfdk with respect to u
+        if verbose; fprintf('Calculating d2fdudk...'); end
+        d2fdudk = calculate_derivative(dfdk, u_syms, 'f', {'k','u'});
+        if verbose; fprintf('Done.\n'); end
+    end
     
     % Output's second derivatives
     if verbose; fprintf('Calculating d2ydx2...'); end
@@ -526,7 +645,7 @@ if order >= 2
     if verbose; fprintf('Calculating d2ydudk...'); end
     d2ydudk = calculate_derivative(dydk, u_syms, 'y', {'k','u'});
     if verbose; fprintf('Done.\n'); end
-
+    
     if verbose; fprintf('Calculating d2x0ds2...'); end
     d2x0ds2 = calculate_derivative(dx0ds, s_syms, 'x', {'s','s'});
     if verbose; fprintf('Done.\n'); end
@@ -577,19 +696,27 @@ else
 end
 
 if order >= 3
-    %Gradient of d2rdx2 with respect to x
-    d3rdx3 = calculate_derivative(d2rdx2, x_syms, 'r', {'x','x','x'});
-    
-    %Gradient of d2rdx2 with respect to k
-    d3rdkdx2 = calculate_derivative(d2rdx2, k_syms, 'r', {'x','x','k'});
-    
-    %Gradient of d2fdx2 with respect to x
-    d3fdx3 = S_sym*reshape_derivative(d3rdx3, [nr,nx*nx*nx], 'r',{'x' 'x' 'x'});
-    d3fdx3 = reshape_derivative(d3fdx3, [xn*nx*nx,nx], 'f',{'x' 'x' 'x'});
-    
-    %Gradient of d2fdx2 with respect to k
-    d3fdkdx2 = S_sym*reshape_derivative(d3rdkdx2, [nr,nx*nx*nk], 'r',{'x' 'x' 'k'});
-    d3fdkdx2 = reshape_derivative(d3fdkdx2, [nx*nx*nx,nk], 'f',{'x' 'x' 'k'});
+    if useReactions
+        % Gradient of d2rdx2 with respect to x
+        d3rdx3 = calculate_derivative(d2rdx2, x_syms, 'r', {'x','x','x'});
+        
+        % Gradient of d2rdx2 with respect to k
+        d3rdkdx2 = calculate_derivative(d2rdx2, k_syms, 'r', {'x','x','k'});
+        
+        % Gradient of d2fdx2 with respect to x
+        d3fdx3 = S_sym*reshape_derivative(d3rdx3, [nr,nx*nx*nx], 'r',{'x' 'x' 'x'});
+        d3fdx3 = reshape_derivative(d3fdx3, [xn*nx*nx,nx], 'f',{'x' 'x' 'x'});
+        
+        % Gradient of d2fdx2 with respect to k
+        d3fdkdx2 = S_sym*reshape_derivative(d3rdkdx2, [nr,nx*nx*nk], 'r',{'x' 'x' 'k'});
+        d3fdkdx2 = reshape_derivative(d3fdkdx2, [nx*nx*nx,nk], 'f',{'x' 'x' 'k'});
+    else
+        % Gradient of d2fdx2 with respect to x
+        d3fdx3 = calculate_derivative(d2fdx2, x_syms, 'x', {'x','x','x'});
+        
+        % Gradient of d2fdx2 with respect to k
+        d3fdkdx2 = calculate_derivative(d2fdx2, k_syms, 'x', {'x','x','k'});
+    end
     
     % Gradient of d2x0ds2 with respect to s
     d3x0ds3 = calculate_derivative(d2x0ds2, s_syms, 'x', {'s','s','s'});
@@ -619,7 +746,7 @@ if order >= 1
     dfdx     = symbolic2function(dfdx, 'f', 'x');
     dfdu     = symbolic2function(dfdu, 'f', 'u');
     dfdk     = symbolic2function(dfdk, 'f', 'k');
-
+    
     drdx     = symbolic2function(drdx, 'r', 'x');
     drdu     = symbolic2function(drdu, 'r', 'u');
     drdk     = symbolic2function(drdk, 'r', 'k');
@@ -642,7 +769,7 @@ if order >= 2
     d2fdxdk  = symbolic2function(d2fdxdk, 'f', {'k' 'x'});
     d2fdkdu  = symbolic2function(d2fdkdu, 'f', {'u' 'k'});
     d2fdudk  = symbolic2function(d2fdudk, 'f', {'k' 'u'});
-
+    
     d2rdx2   = symbolic2function(d2rdx2, 'r', {'x' 'x'});
     d2rdu2   = symbolic2function(d2rdu2, 'r', {'u' 'u'});
     d2rdxdu  = symbolic2function(d2rdxdu, 'r', {'u' 'x'});
@@ -922,7 +1049,7 @@ if verbose; fprintf('done.\n'); end
                 fun = string2fun(string_rep, num, dens, opts.Inf2Big, opts.Nan2Zero);
                 
             case 'mex'
-
+                
                 % Don't create MEX functions for x0 functions, because they
                 % aren't called very many times
                 if strcmp(num,'x')
@@ -941,7 +1068,7 @@ if verbose; fprintf('done.\n'); end
                 
                 % Generate mex C code
                 getMexReadyCode(dsym, nzi, nzsizes, x_syms, u_syms, k_syms, variable_name, opts.MEXDirectory)
-             
+                
                 fun = str2func([variable_name 'fun']);
         end
         
@@ -971,7 +1098,7 @@ if verbose; fprintf('done.\n'); end
             string_rep = strjoin(row(strelements), ';');
             
         else
-    
+            
             % Get nonzero derivative logical matrix
             nzlogical = getNonZeroEntries(num, dens);
             
@@ -1030,7 +1157,7 @@ if verbose; fprintf('done.\n'); end
         end
         string_rep = regexprep(string_rep, [x_strs; u_strs; k_strs; s_strs], [xindexstring; uindexstring; kindexstring; sindexstring], 0);
         
-    end         
+    end
 
     function d2ydx2dx1_ = calculate_derivative(dydx1_, x2Syms_, num, dens)
         % y = dependent variable
@@ -1123,7 +1250,7 @@ if verbose; fprintf('done.\n'); end
         % Get nonzero terms
         nzterms = mat(nzindices);
         
-        % Initialize matrix 
+        % Initialize matrix
         matout = initializeMatrixMupad(nzsub_i, nzsub_j, nzterms, newsize(1), newsize(2));
         
     end
@@ -1195,13 +1322,13 @@ try
         expressions{i} = regexp(expressions{i}, '((("[^"]*")|(\<[A-Za-z_][A-Za-z0-9_]*\>))(\.(("[^"]*")|(\<[A-Za-z_][A-Za-z0-9_]*\>)))?)(?@temp($1,i))');
     end
 catch ME % Matlab flaw: regexp swallows user-generated exception
-   if (strcmp(ME.identifier,'MATLAB:REGEXP:EvaluationError'))
-       % Find the start of the real message
-       start = regexp(ME.message, 'The species');
-       
-       % Set the exception back to the way it is supposed to be
-       error('KroneckerBio:AmbiguousSpeciesName', ME.message(start:end))
-   end
+    if (strcmp(ME.identifier,'MATLAB:REGEXP:EvaluationError'))
+        % Find the start of the real message
+        start = regexp(ME.message, 'The species');
+        
+        % Set the exception back to the way it is supposed to be
+        error('KroneckerBio:AmbiguousSpeciesName', ME.message(start:end))
+    end
 end
 end
 
@@ -1210,7 +1337,7 @@ function transmute(input, ambiguous_names, type, i) % Matlab bug prevents this f
 stripped_input = strrep(input, '"', '');
 
 index = lookupmember(stripped_input, ambiguous_names);
-    
+
 assert(index == 0, 'KroneckerBio:AmbiguousSpeciesName', 'The species "%s" used in %s #%i is ambiguous because there are several species in the model with that name', input, type, i)
 end
 
@@ -1286,15 +1413,15 @@ fun = str2func(fun);
 end
 
 function fun = setfun_rf(basefun, k)
-    fun = @(t,x,u)basefun(t,x,u,k);
+fun = @(t,x,u)basefun(t,x,u,k);
 end
 
 function fun = setfun_y(basefun, is0order, k, ny)
-    if is0order
-        fun = @(t,x,u) vectorize_y(basefun, t, x, u, k, ny);
-    else
-        fun = @(t,x,u) basefun(t, x, u, k);
-    end
+if is0order
+    fun = @(t,x,u) vectorize_y(basefun, t, x, u, k, ny);
+else
+    fun = @(t,x,u) basefun(t, x, u, k);
+end
 end
 
 function fun = setfun_x0(basefun, k)
@@ -1302,20 +1429,20 @@ fun = @(s)basefun(s,k);
 end
 
 function val = vectorize_y(y, t, x, u, k, ny)
-    nt = numel(t);
-    val = zeros(ny,nt);
-    if isempty(x)
-        x = zeros(0,nt);
-    end
-    if isempty(u)
-        u = zeros(0,nt);
-    end
-    if isempty(k)
-        k = 0; % doesn't change in time
-    end
-    for it = 1:nt
-        val(:,it) = y(t(it), x(:,it), u(:,it), k);
-    end
+nt = numel(t);
+val = zeros(ny,nt);
+if isempty(x)
+    x = zeros(0,nt);
+end
+if isempty(u)
+    u = zeros(0,nt);
+end
+if isempty(k)
+    k = 0; % doesn't change in time
+end
+for it = 1:nt
+    val(:,it) = y(t(it), x(:,it), u(:,it), k);
+end
 end
 
 function rOut = evaluate_external_functions(rIn, ids)

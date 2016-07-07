@@ -63,6 +63,11 @@ if isempty(compartment)
     compartment = '';
 end
 
+% Make sure no ODEs are directly specified in the model
+ruleTypes = {m.Rules.Type};
+ruleTypes = ruleTypes(~cellfun(@isempty, ruleTypes));
+assert(~any(ismember(ruleTypes, 'rate')), 'KroneckerBio:addReactionAnalytic:ODEsPresent', 'Directly specified ODEs not compatible with reactions')
+
 % Standardize reaction name
 [nameForward, nameReverse] = fixReactionName(name);
 

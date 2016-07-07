@@ -6,9 +6,9 @@ end
 end
 
 function testInitializingModel(a)
-model_name = 'TestAnalytic';
+modelName = 'TestAnalytic';
 m = InitializeModelAnalytic('TestAnalytic');
-a.verifyEqual(m.Name, model_name);
+a.verifyEqual(m.Name, modelName);
 end
 
 function testInitializingModelWithEmptyName(a)
@@ -339,13 +339,27 @@ a.verifyEqual({m.Rules.Name}, {test.Outputs.Name})
 a.verifyEqual({m.Rules.Name}, {test.Outputs.Expression})
 end
 
-function testStateSpaceEqModelBuilding(a)
-a.verifyFail % Not implemented yet in this rebase
-%   TODO: Revisit when reorganizing models interface, possibly with a separate
-%   model type that specifies ODEs. Alternatively, implement this using rate
-%   rules that directly modify m.f in finalizeModelAnalytic.
-%   
-% m = theo_model_statespace;
-% a.verifyEqual(m.nx, 2)
-% a.verifyEqual(m.f(0,[10,10],[]), [-15.0; 13.5])
+function testOdeModelBuilding(a)
+modelName = 'EquilibriumODE';
+m = equilibrium_model_ode;
+a.verifyEqual(m.Name, modelName);
+end
+
+function testOdeModelBuilding2(a)
+modelName = 'TheoModelODEs';
+m1 = theo_model_ode;
+a.verifyEqual(m1.Name, modelName);
+
+% Verify with reaction-based analytic model
+m2 = theo_model;
+
+t = rand;
+x = rand(m2.nx,1);
+u = rand(m2.nu,1);
+
+a.verifyEqual(m1.f(t,x,u), m2.f(t,x,u), 'RelTol', 1e-8, 'AbsTol', 1e-8);
+a.verifyEqual(m1.dfdx(t,x,u), m2.dfdx(t,x,u), 'RelTol', 1e-8, 'AbsTol', 1e-8);
+a.verifyEqual(m1.dfdk(t,x,u), m2.dfdk(t,x,u), 'RelTol', 1e-8, 'AbsTol', 1e-8);
+a.verifyEqual(m1.d2fdx2(t,x,u), m2.d2fdx2(t,x,u), 'RelTol', 1e-8, 'AbsTol', 1e-8);
+a.verifyEqual(m1.d2fdkdx(t,x,u), m2.d2fdkdx(t,x,u), 'RelTol', 1e-8, 'AbsTol', 1e-8);
 end

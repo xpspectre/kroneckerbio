@@ -209,3 +209,42 @@ a.verifyEqual(m1.Reactions, m2.Reactions)
 a.verifyEqual(m1.Rules, m2.Rules)
 a.verifyEqual(m1.Outputs, m2.Outputs)
 end
+
+% Make sure that the function handles/closures (m.Update and m.Updatefield)
+%   of copied models don't point to the 1st model
+% This was an issue with the prior analytic model implementation
+function testMassActionModelCopy(a)
+m = equilibrium_model();
+ms = [m; m];
+
+ms(1) = ms(1).UpdateField(struct('Name', 'Test1'));
+ms(1) = ms(1).Update(ones(m.nk,1));
+ms(2) = ms(2).Update(zeros(m.nk,1));
+
+a.verifyEqual(ms(1).Name, 'Test1');
+a.verifyEqual(ms(2).Name, 'Equilibrium'); % if function handles in both models point to the same thing, the m(2).Name will be 'Test1' as well
+a.verifyEqual(ms(1).k, ones(m.nk,1));
+a.verifyEqual(ms(2).k, zeros(m.nk,1));
+
+ms(2) = ms(2).UpdateField(struct('Name', 'Test2'));
+
+a.verifyEqual(ms(2).Name, 'Test2');
+end
+
+function testAnalyticModelCopy(a)
+m = equilibrium_model_analytic();
+ms = [m; m];
+
+ms(1) = ms(1).UpdateField(struct('Name', 'Test1'));
+ms(1) = ms(1).Update(ones(m.nk,1));
+ms(2) = ms(2).Update(zeros(m.nk,1));
+
+a.verifyEqual(ms(1).Name, 'Test1');
+a.verifyEqual(ms(2).Name, 'Equilibrium'); % if function handles in both models point to the same thing, the m(2).Name will be 'Test1' as well
+a.verifyEqual(ms(1).k, ones(m.nk,1));
+a.verifyEqual(ms(2).k, zeros(m.nk,1));
+
+ms(2) = ms(2).UpdateField(struct('Name', 'Test2'));
+
+a.verifyEqual(ms(2).Name, 'Test2');
+end

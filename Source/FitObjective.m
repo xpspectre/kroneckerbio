@@ -90,15 +90,23 @@ end
 
 % Add dummy models if multiple conditions depend on independent k's
 nCon = length(con);
-AddDummyModel = opts.fit.AddDummyModel;
+addDummyModel = opts.fit.AddDummyModel;
 for iCon = 1:nCon
-    iDummy = AddDummyModel(iCon);
+    iDummy = addDummyModel(iCon);
     if iDummy % not 0
-        mName = m(iDummy).Name;
-        mDummy = m(iDummy);
-        mDummy = mDummy.UpdateField(struct('Name', [mName '_Dummy_' num2str(iCon)]));
-        m = [m; mDummy];
-        opts.fit.ComponentMap{iCon,1} = length(m); % reassign component map to point to dummy model
+        % See if the required dummy model has already been added
+        prevDummy = addDummyModel(1:iCon-1);
+        if ismember(iDummy, prevDummy)
+            iDummyNew = opts.fit.ComponentMap{ismember(prevDummy, iDummy),1}; % get reassigned model ind from previously added dummy
+        else
+            iBaseModel = opts.fit.ComponentMap{iCon,1};
+            mName = m(iBaseModel).Name;
+            mDummy = m(iBaseModel);
+            m = [m; mDummy];
+            iDummyNew = length(m);
+            m(iDummyNew) = m(iDummyNew).UpdateField(struct('Name', [mName '_Dummy_' num2str(iDummyNew)]));
+        end
+        opts.fit.ComponentMap{iCon,1} = iDummyNew; % reassign component map to point to dummy model
     end
 end
 

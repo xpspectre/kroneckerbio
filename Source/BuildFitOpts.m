@@ -365,10 +365,10 @@ LowerBounds_{4} = fixBounds(newopts.DoseControlLowerBound, nh);
 UpperBounds_{4} = fixBounds(newopts.DoseControlUpperBound, nh);
 
 ParamStart_ = cell(1,4);
-ParamStart_{1} = validateBounds(newopts.StartingParams, LowerBounds_{1}, UpperBounds_{1}, kNames);
-ParamStart_{2} = validateBounds(newopts.StartingSeeds, LowerBounds_{2}, UpperBounds_{2}, sNames);
-ParamStart_{3} = validateBounds(newopts.StartingInputControls, LowerBounds_{3}, UpperBounds_{3});
-ParamStart_{4} = validateBounds(newopts.StartingDoseControls, LowerBounds_{4}, UpperBounds_{4});
+ParamStart_{1} = validateBounds(newopts.StartingParams, LowerBounds_{1}, UpperBounds_{1}, newopts.UseParams, kNames);
+ParamStart_{2} = validateBounds(newopts.StartingSeeds, LowerBounds_{2}, UpperBounds_{2}, newopts.UseSeeds, sNames);
+ParamStart_{3} = validateBounds(newopts.StartingInputControls, LowerBounds_{3}, UpperBounds_{3}, newopts.UseInputControls);
+ParamStart_{4} = validateBounds(newopts.StartingDoseControls, LowerBounds_{4}, UpperBounds_{4}, newopts.UseDoseControls);
 
 newopts.ObjWeights = vec(newopts.ObjWeights);
 assert(length(newopts.ObjWeights) == nNewObjectives);
@@ -560,22 +560,33 @@ newConditionName = condition.Name;
 newConditionInd = length(ConditionNames) + 1;
 
 %% Add model or see if model already exists
+% newModelInd holds the base model index
+% newDummyInd holds whether a dummy model needs to be made off a base model and
+%   which dummy model the experiment is based off of
+% newInd = getModelInd(model, ModelNames, ParamNames);
 newModelName = model.Name;
 existingModelInd = find(ismember(ModelNames, newModelName)); % can be multiple matches if multiple conditions share a model
 needDummyModel = true;
-if isempty(existingModelInd) % new model
+if isempty(existingModelInd) % completely new model
     newModelInd = length(ModelNames) + 1; % assign new model index
     needDummyModel = false;
+    newDummyInd = 0;
 else % existing model
     % Check if existing model shares UseParams. If existing model shares
     %   UseParams, then the new condition will refer to the existing model. If the
     %   existing model has a different UseParams, make a note for FitObjective
     %   to add a dummy model when used.
     for i = 1:length(existingModelInd)
-        existingUseParams = UseParams{existingModelInd};
+        existingUseParams = UseParams{existingModelInd(i)};
         if all(newopts.UseParams == existingUseParams)
             newModelInd = existingModelInd(1);
             needDummyModel = false;
+            if AddDummyModel(existingModelInd(i)) % a dummy was previously added with these fit params
+                newDummyInd = AddDummyModel(existingModelInd(i));
+            else % a completely new model was previusly added with these fit params
+                newDummyInd = 0;
+            end
+            break
         end
     end
     % If it falls through through to here w/o a match, needDummyModel remains true
@@ -583,9 +594,7 @@ end
 
 if needDummyModel
     newModelInd = existingModelInd(1);
-    newDummyInd = newModelInd;
-else
-    newDummyInd = 0;
+    newDummyInd = length(ModelNames) + 1;
 end
 
 %% Assemble fit fields
@@ -611,6 +620,7 @@ AddDummyModel(i) = newDummyInd;
 ObjectiveNames = [ObjectiveNames; newObjectiveNames];
 
 %% Assemble component map
+% This is a cell array because the obj fun entries may be vectors themselves
 ComponentMap = [ComponentMap; {newModelInd, newConditionInd, newObjectiveInds}];
 
 %% Assemble parameter mapper
@@ -698,7 +708,7 @@ switch nBounds
 end
 end
 
-function out = validateBounds(in, lb, ub, names)
+function out = validateBounds(in, lb, ub, useParams, names)
 % Check bounds on parameters: returning it if it satisfies them, setting equal to
 % appropriate bound if it falls outside and throwing warning. Accepts vectors of
 % in, lb, and ub. Throws error if input vectors' lengths don't match.
@@ -710,16 +720,24 @@ function out = validateBounds(in, lb, ub, names)
 %       Vector of lower bounds
 %   ub [ nx x 1 double vector ]
 %       Vector of upper bounds
-%   names [ nx x 1 cell vector of strings ]
+%   useParams [ nx x 1 double vector {ones(nx,1)} ]
+%       Vector of params being fit. Bounds validation only run on fit params.
+%       Default is validate all params.
+%   names [ nx x 1 cell vector of strings {} ]
 %       Optional names of parameters for useful warning/error messages
 %
 % Outputs:
 %   out [ nx x 1 double vector ]
 %       Vector of validated/floored+ceilinged parameters
 
-if nargin < 4
+if nargin < 5
     names = [];
+    if nargin < 4
+        useParams = ones(length(in,1));
+    end
 end
+
+useParams = logical(useParams);
 
 % Make sure all inputs have the same dimension
 in = vec(in);
@@ -735,7 +753,7 @@ if ~isempty(names)
     assert(nin == nNames, 'BuildFitOpts:validateBounds:nameLengthMismatch', 'Fit param vector length %d and names length %d don''t match', nin, nNames);
 end
 
-lMask = in < lb;
+lMask = useParams & in < lb;
 if any(lMask)
     lInds = find(lMask);
     for i = 1:numel(lInds)
@@ -750,7 +768,7 @@ if any(lMask)
 end
 in(lMask) = lb(lMask);
 
-uMask = in > ub;
+uMask = useParams & in > ub;
 if any(uMask)
     uInds = find(uMask);
     for i = 1:numel(uInds)
@@ -768,6 +786,3 @@ in(uMask) = ub(uMask);
 out = in;
 
 end
-
-
-

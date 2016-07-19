@@ -9,7 +9,7 @@ function [m, con] = updateAllActiveParameters(m, con, T, ComponentMap, T2Tlocal)
 %       The experimental conditions under which the model will be simulated
 %   T [ nT x 1 double vector ]
 %       Overall Theta vector of parameteres to fit from FitObjective
-%   ComponentMap [ nObjx 3 double matrix ]
+%   ComponentMap [ nObj x 3 double matrix ]
 %       Model+condition+objective mapping with 1 row for each objective from fit
 %       options
 %   T2Tlocal [ function handle (nT x 1 double vector) -> (nCon x 1 cell

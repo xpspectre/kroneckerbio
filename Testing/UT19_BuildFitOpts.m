@@ -82,7 +82,7 @@ a.assertEqual(opts.fit.ComponentMap, {1,1,1})
 Use    = [ 2,    0]';
 opts = BuildFitOpts(opts, a.TestData.m, a.TestData.con2, a.TestData.obj2, struct('ParamSpec', table(Type, LB, UB, Use, 'RowNames', Name)));
 a.assertEqual(opts.fit.ComponentMap, {1,1,1;1,2,2});
-a.assertEqual(opts.fit.AddDummyModel, [0;1]);
+a.assertEqual(logical(opts.fit.AddDummyModel), [false;true]);
 end
 
 function testMassActionModelUpdateField(a)
@@ -178,7 +178,7 @@ opts = BuildFitOpts(opts, m, con4, [obj4_1; obj4_2], newopts4);
 
 % Test that opts' fields are right
 a.assertEqual(opts.fit.ComponentMap, {1,1,1;1,2,2;1,3,3;1,4,[4;5]});
-a.assertEqual(opts.fit.AddDummyModel, [0;0;1;1]);
+a.assertEqual(logical(opts.fit.AddDummyModel), [false;false;true;true]);
 
 % Test getting and setting params, bounds, etc
 opts.fit.T2Tlocal([4;5;6;7]);

@@ -68,13 +68,13 @@ for i = 1:nCon
     [outputsList, timesList, measurementsList] = generateTestData(m, con_i, times, outputs, sd);
     obs = observationLinearWeightedSumOfSquares(outputsList, timesList, sd, ['Obs' num2str(i)]);
     obj_i = obs.Objective(measurementsList);
-    opts = BuildFitOpts(opts, m, con_i, obj_i, struct('UseParams', [i;1]));
+    opts = BuildFitOpts(opts, m, con_i, obj_i, struct('UseParams', [i;1])); % each condition needs different param
 end
 
 a.verifyEqual(length(opts.fit.ModelNames), nCon);
 a.verifyEqual(length(opts.fit.ConditionNames), nCon);
 a.verifyEqual(length(opts.fit.ObjectiveNames), nCon);
-a.verifyEqual(opts.fit.AddDummyModel, [0;1;1]); % different UseParams -> added dummy models
+a.verifyEqual(logical(opts.fit.AddDummyModel), [false;true;true]); % different UseParams -> added dummy models
 end
 
 function testMakeMultiModelFit(a)

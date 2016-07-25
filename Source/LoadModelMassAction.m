@@ -327,8 +327,11 @@ for iFile = 1:nFiles
                     products = tokens(3:4);
                     products = products(~strcmp(products, '0'));
                     
+                    names = tokens(7:end);
+                    names = names(~ismember(names, ','));
+                    
                     % This is a normal line
-                    m = AddReaction(m, tokens(7:end), reactants, products, parameters(1,:), parameters(2,:));
+                    m = AddReaction(m, names, reactants, products, parameters(1,:), parameters(2,:));
                 else
                     % Split between the equal sign
                     parameter = regexp(tokens{end}, '=', 'split');

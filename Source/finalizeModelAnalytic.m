@@ -915,10 +915,6 @@ if order >= 3
     m.d3x0ds3   = setfun_x0(d3.x0ds3);
 end
 
-% m.Ready  = true;
-% m.Update = @update;
-% m.UpdateField = @updateField;
-
 m = final(m, x0, f, r, y, d, d2, d3, order);
 
 if verbose; fprintf('done.\n'); end

@@ -36,7 +36,7 @@ d = con.d;
 
 % * Integrate to steady-state
 if con.SteadyState
-    ssSol = integrateSteadystateSys(m, con, opts);
+    ssSol = steadystateSysComp(m, con, opts);
     ic = ssSol.ye(:,end);
 else
     order = 0;

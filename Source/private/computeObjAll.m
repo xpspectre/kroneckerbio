@@ -4,6 +4,7 @@ function varargout = computeObjAll(m, con, obj, opts, mode, varargin)
 %
 % Usage:
 %   G = computeObjAll(m, con, obj, opts, 'val')
+%   [G, GAll] = computeObjAll(m, con, obj, opts, 'val')
 %   [G, D] = computeObjAll(m, con, obj, opts, 'grad')
 %   [G, D, H] = computeObjAll(m, con, obj, opts, 'hess')
 %   F = computeObjAll(m, con, obj, opts, 'info')
@@ -35,6 +36,9 @@ function varargout = computeObjAll(m, con, obj, opts, mode, varargin)
 %	G [ double scalar ]
 %       Objective function value from sum of all objectives in fit
 %       object with current parameters
+%   GAll [ nCon x 1 double vector ]
+%       Individual expt's objective function values, after application of
+%       weights
 %   D [ nT x 1 double vector ]
 %       Gradient w.r.t. all parameters in Theta for fmincon
 %   H [ nT x nT double matrix ]
@@ -156,6 +160,7 @@ switch mode
     case 'val'
         G = sum(Gs);
         varargout{1} = G;
+        varargout{2} = Gs;
     case 'grad'
         G = sum(Gs);
         D = opts.fit.Tlocal2T(Ds, 'sum');

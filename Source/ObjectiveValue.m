@@ -1,4 +1,4 @@
-function G = ObjectiveValue(m, con, obj, opts)
+function [G, GAll] = ObjectiveValue(m, con, obj, opts)
 %ObjectiveValue Evaluate a set of objective functions
 %   
 % Usage:
@@ -25,6 +25,9 @@ function G = ObjectiveValue(m, con, obj, opts)
 % Outputs:
 %	G [ real scalar ]
 %       The objective function value
+%   GAll [ nCon x 1 double vector ]
+%       Individual expt's objective function values, after application of
+%       weights
 
 %% Work-up
 % Clean up inputs
@@ -37,4 +40,4 @@ if nargin < 4 || ~isfield(opts, 'fit')
 end
 
 %% Run appropriate objective evaluation
-G = computeObjAll(m, con, obj, opts, 'val');
+[G, GAll] = computeObjAll(m, con, obj, opts, 'val');

@@ -529,7 +529,6 @@ objectivefun = @objective;
 end
 
 %% Helper functions
-
 function validateOpts(m, con, obj, opts)
 % Make sure models+conditions+objectives match (in number at least) the options.
 % Throws an exception if invalid

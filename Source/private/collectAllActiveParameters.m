@@ -56,7 +56,10 @@ if nargout == 2
                 kNames = {m(Ind{i}).Parameters.Name};
                 Name{i} = kNames{details_(i,2)};
             case 's'
-                parentModelInd = [ComponentMap{:,2}] == Ind{i};
+                componentMapRowMask = [ComponentMap{:,2}] == Ind{i};
+                componentMapRowInd = find(componentMapRowMask);
+                componentMapRowInd = componentMapRowInd(1);
+                parentModelInd = ComponentMap{componentMapRowInd,1};
                 sNames = {m(parentModelInd).Seeds.Name};
                 Name{i} = sNames{details_(i,2)};
             otherwise

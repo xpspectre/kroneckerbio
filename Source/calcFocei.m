@@ -47,6 +47,9 @@ function [objfunval, objfungrad] = calcFocei(int, outputs, measurements, order, 
 nx = int.nx;
 ny = int.ny;
 nT = int.nT;
+% if isfield(int, 'dxdT')
+%     nT = int.nT;
+% end
 
 % Indexing
 [hInds, RiInds, RiPos] = getOutputInds(int.y_names, outputs);

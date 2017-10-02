@@ -122,10 +122,10 @@ for iCon = 1:nCon
         case 'info'
             Fs(iCon) = computeObjInfo(m_i, con_i, obj_i, opts_i, dxdTSol{iCon});
         case 'prob' % Doesn't have a custom computeObj* function
-            AbsTol = fixAbsTol(opts_i.AbsTol, 1, opts_i.Continuous, m.nx, 1, opts_i.UseAdjoint, opts_i.UseParams, opts_i.UseSeeds, {opts_i.UseInputControls}, {opts_i.UseDoseControls});
+            AbsTol = fixAbsTol(opts_i.AbsTol, 1, opts_i.Continuous, m_i.nx, 1, opts_i.UseAdjoint, opts_i.UseParams, opts_i.UseSeeds, {opts_i.UseInputControls}, {opts_i.UseDoseControls});
             opts_i.AbsTol = AbsTol{1};
             % Integrate
-            ints = integrateAllSys(m, con_i, obj_i, opts_i);
+            ints = integrateAllSys(m_i, con_i, obj_i, opts_i);
             % Add fields for prior objectives
             [ints.UseParams] = deal(opts_i.UseParams);
             [ints.UseSeeds] = deal(opts_i.UseSeeds);
@@ -138,10 +138,10 @@ for iCon = 1:nCon
             end
             ps(iCon) = sum(p);
         case 'logp' % Doesn't have a custom computeObj* function
-            AbsTol = fixAbsTol(opts_i.AbsTol, 1, opts_i.Continuous, m.nx, 1, opts_i.UseAdjoint, opts_i.UseParams, opts_i.UseSeeds, {opts_i.UseInputControls}, {opts_i.UseDoseControls});
+            AbsTol = fixAbsTol(opts_i.AbsTol, 1, opts_i.Continuous, m_i.nx, 1, opts_i.UseAdjoint, opts_i.UseParams, opts_i.UseSeeds, {opts_i.UseInputControls}, {opts_i.UseDoseControls});
             opts_i.AbsTol = AbsTol{1};
             % Integrate
-            ints = integrateAllSys(m, con_i, obj_i, opts_i);
+            ints = integrateAllSys(m_i, con_i, obj_i, opts_i);
             % Add fields for prior objectives
             [ints.UseParams] = deal(opts_i.UseParams);
             [ints.UseSeeds] = deal(opts_i.UseSeeds);

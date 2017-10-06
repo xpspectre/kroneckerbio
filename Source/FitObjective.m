@@ -1,4 +1,4 @@
-function [m, con, G, D] = FitObjective(m, con, obj, opts)
+function [m, con, G, D, opts] = FitObjective(m, con, obj, opts)
 %FitObjective Optimize the parameters of a model to minimize a set of
 %   objective functions
 %
@@ -47,6 +47,10 @@ function [m, con, G, D] = FitObjective(m, con, obj, opts)
 %       The optimum objective function value
 %	D [ real vector nT ]
 %       The objective gradient at the optimum parameter set
+%   opts [ options struct scalar ]
+%       Options struct that's been validated and updated by FitObjective.
+%       In particular, FitObjective may modify opts to add dummy models if
+%       different experimental conditions w/ different rate params require it.
 
 %% Work-up
 % Clean up inputs

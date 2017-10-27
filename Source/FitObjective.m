@@ -177,7 +177,7 @@ T0(T0 > UpperBound) = UpperBound(T0 > UpperBound);
 
 %% Abort in rare case of no optimization
 if numel(T0) == 0
-    [G, D] = objective(T0);
+    [G, D] = fminconObjective(T0);
     return
 end
 
@@ -275,13 +275,13 @@ for iRestart = 1:opts.Restart+1
                 [That, G, exitflag] = run(ms, localProblem, globalOpts.nStartPoints);
             case 'patternsearch'
                 psOpts = psoptimset('MaxIter', globalOpts.MaxIter, 'UseParallel', globalOpts.UseParallel);
-                [That, G, exitflag] = patternsearch(@objective, That, [], [], ...
+                [That, G, exitflag] = patternsearch(fminconObjective, That, [], [], ...
                     opts.Aeq, opts.beq, LowerBound, UpperBound, [], psOpts);
             otherwise
                 error('Error:KroneckerBio:FitObjective: %s global optimization algorithm not recognized.', globalOpts.Algorithm)
         end
         
-        [~, D] = objective(That); % since global solvers don't return gradient at endpoint
+        [~, D] = fminconObjective(That); % since global solvers don't return gradient at endpoint
         
     else
         if strcmp(opts.Method, 'fmincon')
@@ -295,7 +295,7 @@ for iRestart = 1:opts.Restart+1
     % Abortion values are not returned by fmincon and must be retrieved
     if aborted
         That = Tabort;
-        [G, D] = objective(That);
+        [G, D] = fminconObjective(That);
     end
     
     % Re-apply stiff bounds

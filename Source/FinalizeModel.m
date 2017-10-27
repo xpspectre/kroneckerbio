@@ -206,30 +206,52 @@ for i = 1:nr
     
 end
 
-%% Resolve output compartments and standardize names
-for i = 1:ny
-    
-    % Extract output
-    output = m.Outputs(i);
-    name        = output.Name;
-    expr        = output.Expression;
+%% Resolve compartment sizes and standardize names
+for i = 1:nv
+    % Extract compartment
+    compartment = m.Compartments(i);
+    name = compartment.Name;
+    expr = compartment.Size;
     
     % Check/qualify species in output expression
     if is(m, 'Model.MassActionAmount')
-        outputSpecies = expr(:,1)';
-        outputSpecies = outputSpecies(~cellfun(@isempty,outputSpecies)); % species name may be empty, indicating constant
-        [unambiguousSpecies, unqualified] = qualifyCompartment(outputSpecies);
-        expr(unqualified,1) = unambiguousSpecies(unqualified)';
+        contributor_names = expr(:,1);
+        non_empty_contributors = ~cellfun(@isempty, contributor_names);
+        unambiguous_names = qualifyCompartment(contributor_names(non_empty_contributors));
+        expr(non_empty_contributors,1) = unambiguous_names;
     elseif is(m, 'Model.Analytic')
-        outputSpecies = getSpeciesFromExpr(expr);
-        [unambiguousSpecies, unqualified] = qualifyCompartment(outputSpecies);
-        expr = substituteQuotedExpressions(expr, outputSpecies(unqualified), unambiguousSpecies(unqualified), true);
+        contributor_names = getSpeciesFromExpr(expr);
+        [unambiguousSpecies, unqualified] = qualifyCompartment(contributor_names);
+        expr = substituteQuotedExpressions(expr, contributor_names(unqualified), unambiguousSpecies(unqualified), true);
+    end
+    
+    % Update reaction
+    compartment.Size = expr;
+    m.Compartments(i) = compartment;
+end
+
+%% Resolve output compartments and standardize names
+for i = 1:ny
+    % Extract output
+    output = m.Outputs(i);
+    name = output.Name;
+    expr = output.Expression;
+    
+    % Check/qualify species in output expression
+    if is(m, 'Model.MassActionAmount')
+        contributor_names = expr(:,1);
+        non_empty_contributors = ~cellfun(@isempty, contributor_names);
+        unambiguous_names = qualifyCompartment(contributor_names(non_empty_contributors));
+        expr(non_empty_contributors,1) = unambiguous_names;
+    elseif is(m, 'Model.Analytic')
+        contributor_names = getSpeciesFromExpr(expr);
+        [unambiguousSpecies, unqualified] = qualifyCompartment(contributor_names);
+        expr = substituteQuotedExpressions(expr, contributor_names(unqualified), unambiguousSpecies(unqualified), true);
     end
     
     % Update reaction
     output.Expression = expr;
     m.Outputs(i) = output;
-    
 end
 
 %% Determine if model is a nonlinear mixed effects model
@@ -263,5 +285,4 @@ elseif is(m, 'Model.Analytic')
 elseif is(m, 'Model.Nlme')
     m = finalizeModelNlme(m, varargin{:});
 end
-
 end

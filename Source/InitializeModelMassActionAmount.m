@@ -15,7 +15,7 @@ function m = InitializeModelMassActionAmount(name)
 %       the properties of the model, summarize the constants of the model,
 %       or provide handles to functions that describe the changing state of
 %       the system.
-%       .Type 'Model.MassActionKronecker'
+%       .Type 'Model.MassActionAmount'
 %       .Name [ string ]
 %       .Compartments [ struct vector ]
 %           Each compartment is described by an element of this vector
@@ -118,7 +118,7 @@ function m = InitializeModelMassActionAmount(name)
 %           The order of each reaction
 %       .krInd [ natural vector nr ]
 %           The indexes to the parameters associated with each reaction
-%       .x0 [ function handle returning nonnegative vector nx ]
+%       .x0 [  handle @(s) returns real nonnegative vector nx ]
 %           The values of the initial conditions of each state species.
 %       .dx0ds [ function of seeds returning nonnegative matrix nx by ns ]
 %           First derivative of the initial conditions with respect to the

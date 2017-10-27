@@ -54,6 +54,17 @@ m = InitializeModelMassActionAmount();
 a.verifyError(@()AddCompartment(m, 'test', 4, 1), 'KroneckerBio:Compartment:Dimension');
 end
 
+function testAddCompartmentTwoWays(a)
+m = InitializeModelMassActionAmount();
+m = AddCompartment(m, 'v1', 3, 2);
+m = AddCompartment(m, 'v2', 3, {'', 2});
+m = FinalizeModel(m);
+
+v = m.v(0, m.x0(m.s), m.u);
+
+a.verifyEqual(v(1), v(2))
+end
+
 function [m, x0, u0] = model_with_some_species()
 m = InitializeModelMassActionAmount();
 m = AddCompartment(m, 'v1', 3, 1);
@@ -66,6 +77,16 @@ m = AddParameter(m, 'k2', 3);
 m = FinalizeModel(m);
 x0 = m.x0(m.s);
 u0 = vec([]);
+end
+
+function testDefaultSpecies(a)
+m = InitializeModelMassActionAmount();
+m = AddCompartment(m, 'v', 3, 1);
+m = AddInput(m, 'u', 'v');
+m = AddState(m, 'x', 'v');
+m = FinalizeModel(m);
+a.verifyEqual(m.u(), 0)
+a.verifyEqual(m.x0(m.s), 0)
 end
 
 function testAddReactionFwd(a)
@@ -206,6 +227,20 @@ end
 for i = 1:nForms
     a.verifyError(@()AddReaction(m, 'r1', 'x1', emptySpeciesForms{i}, 'k1'), 'KroneckerBio:fixReactionSpecies:InvalidBlankName');
 end
+end
+
+function testOutputsWithConstants(a)
+m = InitializeModelMassActionAmount();
+m = AddCompartment(m, 'v1', 3, 1);
+m = AddState(m, 'x1', 'v1');
+m = AddState(m, 'x2', 'v1');
+m = AddInput(m, 'u1', 'v1');
+m = AddOutput(m, 'y1', {'', 10});
+m = AddOutput(m, 'y2', {'x1', 2; '', 1});
+m = AddOutput(m, 'y3', {'x2', 2; '', 1; 'u1', 3});
+m = FinalizeModel(m);
+
+a.verifyEqual(m.y(0, [3;4], 5), [10; 7; 24])
 end
 
 function testRemoveComponent(a)

@@ -36,6 +36,33 @@ a.verifyEqual({m.Outputs.Name}, {'y1','y2','y3','y4','y5'});
 verifyDerivatives(a, m);
 end
 
+function testCompartmentChanging(a)
+m = LoadModelMassAction('Equilibrium.txt');
+a.verifyEqual(m.v(0, m.x0(m.s), m.u), 1);
+
+m.Compartment(1).Size = 1;
+m = FinalizeModel(m);
+a.verifyEqual(m.v(0, m.x0(m.s), m.u), 1);
+end
+
+function testVariableCompartmentLoading(a)
+m = LoadModelMassAction('variable_compartments.txt');
+verifyDerivatives(a, m);
+
+v = m.v(0, m.x0(m.s), m.u);
+a.verifyEqual(v(1), v(2))
+a.verifyEqual(v(1), v(3))
+
+v = m.v(0, m.x0(m.s), [2;3]);
+a.verifyEqual(v(2), 2)
+a.verifyEqual(v(3), 3)
+end
+
+function testChenLoading(a)
+m = LoadModelMassAction('Chen.txt');
+verifyDerivatives(a, m);
+end
+
 %% More comprehensive advanced model loading
 function testBasicSbmlLoading(a)
 m = LoadModelSbmlAnalytic('test.xml');
@@ -230,41 +257,83 @@ a.verifyEqual(m1.Rules, m2.Rules)
 a.verifyEqual(m1.Outputs, m2.Outputs)
 end
 
-% Make sure that the function handles/closures (m.Update and m.Updatefield)
-%   of copied models don't point to the 1st model
-% This was an issue with the prior analytic model implementation
 function testMassActionModelCopy(a)
-m = equilibrium_model();
+m = LoadModelMassAction('Equilibrium.txt');
 ms = [m; m];
 
-ms(1) = ms(1).UpdateField(struct('Name', 'Test1'));
 ms(1) = ms(1).Update(ones(m.nk,1));
 ms(2) = ms(2).Update(zeros(m.nk,1));
 
-a.verifyEqual(ms(1).Name, 'Test1');
-a.verifyEqual(ms(2).Name, 'Equilibrium'); % if function handles in both models point to the same thing, the m(2).Name will be 'Test1' as well
 a.verifyEqual(ms(1).k, ones(m.nk,1));
 a.verifyEqual(ms(2).k, zeros(m.nk,1));
-
-ms(2) = ms(2).UpdateField(struct('Name', 'Test2'));
-
-a.verifyEqual(ms(2).Name, 'Test2');
 end
 
 function testAnalyticModelCopy(a)
-m = equilibrium_model_analytic();
+m = LoadModelSbmlAnalytic('test.xml');
+m = FinalizeModel(m);
 ms = [m; m];
 
-ms(1) = ms(1).UpdateField(struct('Name', 'Test1'));
 ms(1) = ms(1).Update(ones(m.nk,1));
 ms(2) = ms(2).Update(zeros(m.nk,1));
 
-a.verifyEqual(ms(1).Name, 'Test1');
-a.verifyEqual(ms(2).Name, 'Equilibrium'); % if function handles in both models point to the same thing, the m(2).Name will be 'Test1' as well
 a.verifyEqual(ms(1).k, ones(m.nk,1));
 a.verifyEqual(ms(2).k, zeros(m.nk,1));
+end
 
-ms(2) = ms(2).UpdateField(struct('Name', 'Test2'));
+function testSaveModelFromFiles(a)
+m_old = LoadModelMassAction('Equilibrium.txt');
+SaveModel(m_old, 'temp.txt');
+m_new = LoadModelMassAction('temp.txt');
+a.verifyTrue(modelsAreEqual(m_old, m_new))
 
-a.verifyEqual(ms(2).Name, 'Test2');
+m_old = LoadModelMassAction('Simple.txt');
+SaveModel(m_old, 'temp.txt');
+m_new = LoadModelMassAction('temp.txt');
+a.verifyTrue(modelsAreEqual(m_old, m_new))
+
+m_old = LoadModelMassAction('DoseModel.txt');
+SaveModel(m_old, 'temp.txt');
+m_new = LoadModelMassAction('temp.txt');
+a.verifyTrue(modelsAreEqual(m_old, m_new))
+
+m_old = LoadModelMassAction('MAPK_DKDP.txt');
+SaveModel(m_old, 'temp.txt');
+m_new = LoadModelMassAction('temp.txt');
+a.verifyTrue(modelsAreEqual(m_old, m_new))
+
+delete('temp.txt')
+end
+
+function testSaveModelComponents(a)
+% Test the corner cases of mass action components
+m = InitializeModelMassActionAmount('my_name');
+m = AddCompartment(m, 'v1', 3, 1);
+m = AddCompartment(m, 'v2', 2, {'x1', 1.2; 'x3', 5.6});
+m = AddCompartment(m, 'cell volume', 2, {'x1', 1.2});
+m = AddParameter(m, 'k1', 2.0);
+m = AddParameter(m, 'parameter 2', 0);
+m = AddParameter(m, 'k3', 2);
+m = AddSeed(m, 's1', 6.7);
+m = AddSeed(m, 'seed 2', 1000);
+m = AddInput(m, 'u1', 'v1');
+m = AddInput(m, 'u2', 'v2', 4.5);
+m = AddInput(m, 'input 1', 'cell volume', 4.5);
+m = AddState(m, 'x1', 'v2');
+m = AddState(m, 'x2', 'v1', 12.5);
+m = AddState(m, 'x3', 'v1', 's1');
+m = AddState(m, 'x4', 'v1', {'s1', 4.2});
+m = AddState(m, 'state 1', 'cell volume', {'s1', 4.2; '', 2; 'seed 2', 1});
+m = AddReaction(m, '', 'x1', 'x3', 'k1');
+m = AddReaction(m, '', {'x2', 'x3'}, 'x4', 'parameter 2', 'k1');
+m = AddReaction(m, '', {'x2', 'x3'}, {'x4', 'x3', 'x4'}, 'parameter 2');
+m = AddReaction(m, 'r 4', {}, 'x1', {'parameter 2', 3}, {'k3', 2});
+m = AddOutput(m, 'y1', 'x1');
+m = AddOutput(m, 'y2', {'x2', 2; '', 10; 'x3', 4});
+m_old = FinalizeModel(m);
+
+SaveModel(m_old, 'temp.txt');
+m_new = LoadModelMassAction('temp.txt');
+a.verifyTrue(modelsAreEqual(m_old, m_new))
+
+delete('temp.txt')
 end

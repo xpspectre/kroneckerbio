@@ -45,7 +45,7 @@ if nargin < 4 || ~isfield(opts, 'fit')
     % Convert Usage 1 -> Usage 2
     [m, con, obj, opts] = ConvertFitOpts(m, con, obj, opts);
 end
-opts.UseAdjoint = false; % adjoint methods not implemented for higher order sensitivities
+% opts.UseAdjoint = false; % adjoint methods not implemented for higher order sensitivities
 verbose = logical(opts.Verbose);
 
 % Store starting parameter sets
@@ -67,7 +67,7 @@ for iT = 1:nT
     T_up = T0;
     
     % Change current parameter by finite amount
-    step_size = 1e-8;
+    step_size = 1e-8; 
     if opts.Normalized
         norm_factor = T_i;
     else

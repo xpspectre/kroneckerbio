@@ -97,7 +97,7 @@ discrete_times = row(unique(timelist));
 % Inherit observation
 obj = observationLinearWeightedSumOfSquares(outputlist, timelist, sd, name);
 
-obj.Type = 'Objective.Data.WeightedSumOfSquares';
+obj.Type = 'Objective.Data.LinearWeightedSumOfSquares';
 obj.Continuous = false;
 
 obj.G = @G;
